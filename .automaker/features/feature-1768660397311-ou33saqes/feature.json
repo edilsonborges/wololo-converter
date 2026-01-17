@@ -1,0 +1,30 @@
+{
+  "category": "Uncategorized",
+  "description": "youtube download is not working",
+  "title": "Fix YouTube download functionality",
+  "images": [],
+  "imagePaths": [],
+  "textFilePaths": [],
+  "skipTests": true,
+  "model": "opus",
+  "thinkingLevel": "none",
+  "reasoningEffort": "none",
+  "priority": 2,
+  "planningMode": "skip",
+  "requirePlanApproval": false,
+  "dependencies": [],
+  "workMode": "current",
+  "titleGenerating": false,
+  "status": "backlog",
+  "id": "feature-1768660397311-ou33saqes",
+  "descriptionHistory": [
+    {
+      "description": "youtube download is not working",
+      "timestamp": "2026-01-17T14:33:17.399Z",
+      "source": "initial"
+    }
+  ],
+  "startedAt": "2026-01-17T14:34:13.623Z",
+  "updatedAt": "2026-01-17T14:34:19.394Z",
+  "branchName": "main"
+}

@@ -1,0 +1,27 @@
+# FastAPI and server
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.12
+
+# Validation and serialization
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# Database
+aiosqlite==0.20.0
+sqlalchemy==2.0.35
+
+# Video/Audio download and conversion
+yt-dlp==2024.10.22
+
+# HTTP client for validation
+httpx==0.27.2
+
+# Rate limiting
+slowapi==0.1.9
+
+# SSE (Server-Sent Events)
+sse-starlette==2.1.3
+
+# Utilities
+python-dotenv==1.0.1

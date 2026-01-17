@@ -1,0 +1,14 @@
+{
+  "category": "ui",
+  "description": "Enable downloading entire playlists or all videos from a channel with a single URL. Provide options to filter by date range, video count limits, or exclude already-downloaded items.\n\n**Rationale:** Users often want to archive entire series, courses, or content creator channels. Manual URL entry for dozens or hundreds of videos is impractical and error-prone.",
+  "title": "Playlist and channel download support",
+  "status": "backlog",
+  "id": "feature-1768659215840-6ynfqdyyl",
+  "descriptionHistory": [
+    {
+      "description": "Enable downloading entire playlists or all videos from a channel with a single URL. Provide options to filter by date range, video count limits, or exclude already-downloaded items.\n\n**Rationale:** Users often want to archive entire series, courses, or content creator channels. Manual URL entry for dozens or hundreds of videos is impractical and error-prone.",
+      "timestamp": "2026-01-17T14:13:35.841Z",
+      "source": "initial"
+    }
+  ]
+}

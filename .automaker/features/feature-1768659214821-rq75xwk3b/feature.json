@@ -1,0 +1,14 @@
+{
+  "category": "ui",
+  "description": "Detect available subtitles for videos and offer options to download them separately (as SRT/VTT files) or embed them directly into the video file. Support multiple languages when available.\n\n**Rationale:** Accessibility and language learning are common use cases. Many videos have valuable subtitle tracks that users want to preserve, especially for educational content or foreign language videos.",
+  "title": "Subtitle/closed caption download and embedding",
+  "status": "backlog",
+  "id": "feature-1768659214821-rq75xwk3b",
+  "descriptionHistory": [
+    {
+      "description": "Detect available subtitles for videos and offer options to download them separately (as SRT/VTT files) or embed them directly into the video file. Support multiple languages when available.\n\n**Rationale:** Accessibility and language learning are common use cases. Many videos have valuable subtitle tracks that users want to preserve, especially for educational content or foreign language videos.",
+      "timestamp": "2026-01-17T14:13:34.821Z",
+      "source": "initial"
+    }
+  ]
+}

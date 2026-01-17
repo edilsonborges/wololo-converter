@@ -1,0 +1,16 @@
+{
+  "category": "ui",
+  "description": "Allow users to paste multiple URLs at once and process them sequentially or in parallel with a configurable queue. Display a queue manager showing pending, active, and completed downloads with drag-to-reorder capabilities.\n\n**Rationale:** Users often want to download multiple videos at once rather than waiting for each to complete individually. This dramatically improves efficiency and user experience for power users who regularly download multiple pieces of content.",
+  "title": "Batch URL processing with queue management",
+  "status": "verified",
+  "id": "feature-1768659213046-bdvvxmmx2",
+  "descriptionHistory": [
+    {
+      "description": "Allow users to paste multiple URLs at once and process them sequentially or in parallel with a configurable queue. Display a queue manager showing pending, active, and completed downloads with drag-to-reorder capabilities.\n\n**Rationale:** Users often want to download multiple videos at once rather than waiting for each to complete individually. This dramatically improves efficiency and user experience for power users who regularly download multiple pieces of content.",
+      "timestamp": "2026-01-17T14:13:33.047Z",
+      "source": "initial"
+    }
+  ],
+  "startedAt": "2026-01-17T14:13:41.054Z",
+  "updatedAt": "2026-01-17T14:21:32.726Z"
+}

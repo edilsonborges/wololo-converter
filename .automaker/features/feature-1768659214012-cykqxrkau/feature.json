@@ -1,0 +1,17 @@
+{
+  "category": "ui",
+  "description": "Present available quality options (1080p, 720p, 480p, etc.) before download starts, allowing users to choose based on file size and quality preferences. Show estimated file sizes for each quality tier.\n\n**Rationale:** Different use cases require different quality levels - users may want 4K for archival but 480p for quick sharing on bandwidth-limited connections. This gives users control over the quality-storage tradeoff.",
+  "title": "Quality/resolution selection for video downloads",
+  "status": "backlog",
+  "id": "feature-1768659214012-cykqxrkau",
+  "descriptionHistory": [
+    {
+      "description": "Present available quality options (1080p, 720p, 480p, etc.) before download starts, allowing users to choose based on file size and quality preferences. Show estimated file sizes for each quality tier.\n\n**Rationale:** Different use cases require different quality levels - users may want 4K for archival but 480p for quick sharing on bandwidth-limited connections. This gives users control over the quality-storage tradeoff.",
+      "timestamp": "2026-01-17T14:13:34.013Z",
+      "source": "initial"
+    }
+  ],
+  "branchName": "main",
+  "startedAt": "2026-01-17T14:42:04.756Z",
+  "updatedAt": "2026-01-17T14:42:09.038Z"
+}

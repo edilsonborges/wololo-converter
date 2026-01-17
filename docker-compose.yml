@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wololo-backend
+    restart: unless-stopped
+    environment:
+      - DEBUG=false
+      - TEMP_DIR=/tmp/wololo
+      - DATABASE_URL=sqlite+aiosqlite:///./data/wololo.db
+      - MAX_CONCURRENT_DOWNLOADS=3
+      - RATE_LIMIT_DOWNLOADS=10/minute
+    volumes:
+      - backend_data:/app/data
+      - temp_downloads:/tmp/wololo
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: wololo-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  backend_data:
+    driver: local
+  temp_downloads:
+    driver: local
