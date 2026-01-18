@@ -216,12 +216,12 @@ Input: {
 🔧 Tool: Write
 Input: {
   "file_path": "/Users/edilson/projects/wololo-converter/frontend/index.html",
-  "content": "<!DOCTYPE html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/favicon.svg\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"description\" content=\"Personal video and audio downloader for YouTube, Instagram, Facebook, and Twitter/X\" />\n    <title>Wololo Converter</title>\n  </head>\n  <body>\n    <div id=\"root\"></div>\n    <script type=\"module\" src=\"/src/main.tsx\"></script>\n  </body>\n</html>\n"
+  "content": "<!DOCTYPE html>\n<html lang=\"en\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/favicon.ico\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"description\" content=\"Personal video and audio downloader for YouTube, Instagram, Facebook, and Twitter/X\" />\n    <title>Wololo Converter</title>\n  </head>\n  <body>\n    <div id=\"root\"></div>\n    <script type=\"module\" src=\"/src/main.tsx\"></script>\n  </body>\n</html>\n"
 }
 
 🔧 Tool: Write
 Input: {
-  "file_path": "/Users/edilson/projects/wololo-converter/frontend/public/favicon.svg",
+  "file_path": "/Users/edilson/projects/wololo-converter/frontend/public/favicon.ico",
   "content": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\">\n  <defs>\n    <linearGradient id=\"grad\" x1=\"0%\" y1=\"0%\" x2=\"100%\" y2=\"100%\">\n      <stop offset=\"0%\" style=\"stop-color:#dc2626;stop-opacity:1\" />\n      <stop offset=\"50%\" style=\"stop-color:#ea580c;stop-opacity:1\" />\n      <stop offset=\"100%\" style=\"stop-color:#ca8a04;stop-opacity:1\" />\n    </linearGradient>\n  </defs>\n  <circle cx=\"50\" cy=\"50\" r=\"45\" fill=\"url(#grad)\"/>\n  <path d=\"M35 30 L70 50 L35 70 Z\" fill=\"white\"/>\n  <path d=\"M40 65 L40 80 L55 72.5 Z\" fill=\"white\" opacity=\"0.8\"/>\n</svg>\n"
 }
 

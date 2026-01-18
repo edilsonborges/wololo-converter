@@ -1,0 +1,31 @@
+{
+  "category": "Uncategorized",
+  "description": "## Parent Task Context (Already Completed)\n\n> **Note:** The following parent task has already been completed. This context is provided to help you understand the background and requirements for this sub-task. Do not re-implement the parent task - focus only on the new sub-task described below.\n\n### Fix video compatibility for downloaded YouTube files\n\n**Description:** ## Parent Task Context (Already Completed)\n\n> **Note:** The following parent task has already been completed. This context is provided to help you understand the background and requirements for this sub-task. Do not re-implement the parent task - focus only on the new sub-task described below.\n\n### Fix YouTube download functionality\n\n**Description:** youtube download is not working\n\n---\n\n## Task Description\n\nstill error, the video downloads but it can play\n\nThis file contains some media which isn’t compatible with QuickTime Player.\n\n---\n\n## Additional Ancestor Context\n\n### Fix YouTube download functionality\n\n**Description:** youtube download is not working\n\n---\n\n## Task Description\n\nyoutube download not working yet, the download is stuck in 95%\n\nplease use this video as example:\nhttps://www.youtube.com/watch?v=jNQXAC9IVRw\n",
+  "title": "Fix downloaded YouTube video playback compatibility",
+  "images": [],
+  "imagePaths": [],
+  "textFilePaths": [],
+  "skipTests": false,
+  "model": "opus",
+  "thinkingLevel": "none",
+  "reasoningEffort": "none",
+  "priority": 2,
+  "planningMode": "skip",
+  "requirePlanApproval": false,
+  "dependencies": [
+    "feature-1768718020505-6gbmhyidy"
+  ],
+  "workMode": "current",
+  "titleGenerating": false,
+  "status": "verified",
+  "id": "feature-1768747437058-o9dk2434w",
+  "descriptionHistory": [
+    {
+      "description": "## Parent Task Context (Already Completed)\n\n> **Note:** The following parent task has already been completed. This context is provided to help you understand the background and requirements for this sub-task. Do not re-implement the parent task - focus only on the new sub-task described below.\n\n### Fix video compatibility for downloaded YouTube files\n\n**Description:** ## Parent Task Context (Already Completed)\n\n> **Note:** The following parent task has already been completed. This context is provided to help you understand the background and requirements for this sub-task. Do not re-implement the parent task - focus only on the new sub-task described below.\n\n### Fix YouTube download functionality\n\n**Description:** youtube download is not working\n\n---\n\n## Task Description\n\nstill error, the video downloads but it can play\n\nThis file contains some media which isn’t compatible with QuickTime Player.\n\n---\n\n## Additional Ancestor Context\n\n### Fix YouTube download functionality\n\n**Description:** youtube download is not working\n\n---\n\n## Task Description\n\nyoutube download not working yet, the download is stuck in 95%\n\nplease use this video as example:\nhttps://www.youtube.com/watch?v=jNQXAC9IVRw\n",
+      "timestamp": "2026-01-18T14:43:57.099Z",
+      "source": "initial"
+    }
+  ],
+  "startedAt": "2026-01-18T14:43:57.128Z",
+  "updatedAt": "2026-01-18T14:57:25.493Z"
+}

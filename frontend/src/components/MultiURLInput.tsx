@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, type FC, type ChangeEvent, type ClipboardEvent } from 'react';
 import { PLATFORMS, type PlatformInfo } from '../types';
+import { Icon, PlatformIcon } from './Icon';
 
 interface MultiURLInputProps {
   onUrlsChange: (urls: ParsedURL[]) => void;
@@ -135,23 +136,10 @@ export const MultiURLInput: FC<MultiURLInputProps> = ({ onUrlsChange, disabled, 
           <button
             type="button"
             onClick={handleClear}
-            className="absolute right-3 top-3 text-gray-400 hover:text-white transition-colors"
+            className="absolute right-3 top-3 p-1 text-text-muted hover:text-text-primary hover:bg-surface-tertiary rounded transition-colors"
             disabled={disabled}
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <Icon name="x" size="sm" />
           </button>
         )}
       </div>
@@ -160,22 +148,18 @@ export const MultiURLInput: FC<MultiURLInputProps> = ({ onUrlsChange, disabled, 
       {parsedUrls.length > 0 && (
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <div className="flex items-center gap-2">
-            <span className="text-gray-400">URLs detected:</span>
-            <span className="font-medium text-white">{parsedUrls.length}</span>
+            <span className="text-text-muted">URLs detected:</span>
+            <span className="font-medium text-text-primary">{parsedUrls.length}</span>
           </div>
           {validCount > 0 && (
-            <div className="flex items-center gap-1 text-green-400">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+            <div className="flex items-center gap-1 text-success-text">
+              <Icon name="check" size="sm" />
               <span>{validCount} valid</span>
             </div>
           )}
           {invalidCount > 0 && (
-            <div className="flex items-center gap-1 text-yellow-400">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
+            <div className="flex items-center gap-1 text-warning-text">
+              <Icon name="alertTriangle" size="sm" />
               <span>{invalidCount} unsupported</span>
             </div>
           )}
@@ -188,20 +172,18 @@ export const MultiURLInput: FC<MultiURLInputProps> = ({ onUrlsChange, disabled, 
           {parsedUrls.filter((u) => u.isValid).map((parsed, idx) => (
             <div
               key={`${parsed.url}-${idx}`}
-              className={`flex items-center gap-1 px-2 py-1 rounded-md bg-gray-700/50 text-sm ${parsed.platformInfo?.color || 'text-gray-400'}`}
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-secondary border border-border-light text-sm`}
             >
-              <span>{parsed.platformInfo?.icon}</span>
-              <span className="max-w-[150px] truncate text-gray-300">{parsed.url}</span>
+              <PlatformIcon platform={parsed.platform || ''} size="sm" className={parsed.platformInfo?.color || 'text-text-muted'} />
+              <span className="max-w-[150px] truncate text-text-secondary">{parsed.url}</span>
             </div>
           ))}
           {parsedUrls.filter((u) => !u.isValid).map((parsed, idx) => (
             <div
               key={`invalid-${parsed.url}-${idx}`}
-              className="flex items-center gap-1 px-2 py-1 rounded-md bg-yellow-500/10 border border-yellow-500/30 text-sm text-yellow-400"
+              className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-warning-light border border-warning/20 text-sm text-warning-text"
             >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01" />
-              </svg>
+              <Icon name="alertTriangle" size="sm" />
               <span className="max-w-[150px] truncate">{parsed.url}</span>
             </div>
           ))}
@@ -210,11 +192,12 @@ export const MultiURLInput: FC<MultiURLInputProps> = ({ onUrlsChange, disabled, 
 
       {/* Supported platforms hint */}
       {!text && (
-        <div className="flex items-center justify-center gap-4 text-gray-500 text-sm">
+        <div className="flex items-center justify-center gap-4 text-text-muted text-sm">
           <span>Supported:</span>
-          {Object.values(PLATFORMS).map((platform) => (
-            <span key={platform.name} className="flex items-center gap-1">
-              {platform.icon} {platform.name}
+          {Object.entries(PLATFORMS).map(([key, platform]) => (
+            <span key={platform.name} className="flex items-center gap-1.5">
+              <PlatformIcon platform={key} size="sm" className={platform.color} />
+              <span>{platform.name}</span>
             </span>
           ))}
         </div>

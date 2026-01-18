@@ -1,5 +1,6 @@
 import type { FC } from 'react';
 import type { JobProgressUpdate, JobStatus } from '../types';
+import { Icon } from './Icon';
 
 interface ProgressCardProps {
   progress: JobProgressUpdate;
@@ -9,14 +10,14 @@ interface ProgressCardProps {
 }
 
 const STATUS_DISPLAY: Record<JobStatus, { label: string; color: string }> = {
-  queued: { label: 'Queued', color: 'text-gray-400' },
-  validating: { label: 'Validating URL...', color: 'text-blue-400' },
-  downloading: { label: 'Downloading...', color: 'text-blue-400' },
-  converting: { label: 'Converting...', color: 'text-purple-400' },
-  finalizing: { label: 'Finalizing...', color: 'text-orange-400' },
-  completed: { label: 'Completed!', color: 'text-green-400' },
-  failed: { label: 'Failed', color: 'text-red-400' },
-  cancelled: { label: 'Cancelled', color: 'text-gray-400' },
+  queued: { label: 'Queued', color: 'text-text-muted' },
+  validating: { label: 'Validating URL...', color: 'text-info-text' },
+  downloading: { label: 'Downloading...', color: 'text-info-text' },
+  converting: { label: 'Converting...', color: 'text-accent' },
+  finalizing: { label: 'Finalizing...', color: 'text-warning-text' },
+  completed: { label: 'Completed!', color: 'text-success-text' },
+  failed: { label: 'Failed', color: 'text-error-text' },
+  cancelled: { label: 'Cancelled', color: 'text-text-muted' },
 };
 
 export const ProgressCard: FC<ProgressCardProps> = ({
@@ -37,7 +38,7 @@ export const ProgressCard: FC<ProgressCardProps> = ({
       {/* Title and status */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-semibold text-white truncate">
+          <h3 className="text-lg font-semibold text-text-primary truncate">
             {progress.title || 'Processing...'}
           </h3>
           <div className={`text-sm ${statusInfo.color} mt-1`}>
@@ -49,44 +50,31 @@ export const ProgressCard: FC<ProgressCardProps> = ({
         {isActive && (
           <button
             onClick={onCancel}
-            className="ml-4 p-2 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+            className="ml-4 p-2 text-text-muted hover:text-error hover:bg-error-light rounded-lg transition-colors"
             title="Cancel download"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <Icon name="x" size="sm" />
           </button>
         )}
       </div>
 
       {/* Progress bar */}
       <div className="mb-4">
-        <div className="flex justify-between text-sm text-gray-400 mb-2">
+        <div className="flex justify-between text-sm text-text-muted mb-2">
           <span>{Math.round(progress.progress)}%</span>
           <div className="flex items-center gap-4">
             {progress.speed && <span>{progress.speed}</span>}
             {progress.eta && <span>ETA: {progress.eta}</span>}
           </div>
         </div>
-        <div className="relative h-3 bg-gray-700 rounded-full overflow-hidden">
+        <div className="relative h-3 bg-surface-tertiary rounded-full overflow-hidden">
           <div
             className={`h-full transition-all duration-300 ease-out rounded-full ${
               isComplete
-                ? 'bg-green-500'
+                ? 'bg-success'
                 : isFailed
-                ? 'bg-red-500'
-                : 'bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500'
+                ? 'bg-error'
+                : 'bg-accent'
             }`}
             style={{ width: `${progress.progress}%` }}
           >
@@ -97,8 +85,8 @@ export const ProgressCard: FC<ProgressCardProps> = ({
 
       {/* Error message */}
       {isFailed && progress.error_message && (
-        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-          <p className="text-red-400 text-sm">{progress.error_message}</p>
+        <div className="mb-4 p-3 bg-error-light border border-error/20 rounded-lg">
+          <p className="text-error-text text-sm">{progress.error_message}</p>
         </div>
       )}
 
@@ -109,20 +97,7 @@ export const ProgressCard: FC<ProgressCardProps> = ({
             onClick={onDownload}
             className="btn-primary flex-1 flex items-center justify-center gap-2"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-              />
-            </svg>
+            <Icon name="download" size="sm" />
             Download File
           </button>
           <a
@@ -131,20 +106,7 @@ export const ProgressCard: FC<ProgressCardProps> = ({
             className="btn-secondary flex items-center justify-center gap-2 px-4"
             title="Direct download link"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-              />
-            </svg>
+            <Icon name="externalLink" size="sm" />
           </a>
         </div>
       )}

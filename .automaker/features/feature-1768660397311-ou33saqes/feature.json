@@ -15,7 +15,7 @@
   "dependencies": [],
   "workMode": "current",
   "titleGenerating": false,
-  "status": "backlog",
+  "status": "verified",
   "id": "feature-1768660397311-ou33saqes",
   "descriptionHistory": [
     {
@@ -24,7 +24,8 @@
       "source": "initial"
     }
   ],
-  "startedAt": "2026-01-17T14:34:13.623Z",
-  "updatedAt": "2026-01-17T14:34:19.394Z",
-  "branchName": "main"
+  "startedAt": "2026-01-17T18:20:59.516Z",
+  "updatedAt": "2026-01-17T18:23:31.639Z",
+  "branchName": "main",
+  "justFinishedAt": "2026-01-17T18:23:31.639Z"
 }

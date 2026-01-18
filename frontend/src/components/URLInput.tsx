@@ -1,5 +1,6 @@
 import { useState, useCallback, type FC, type ChangeEvent, type ClipboardEvent } from 'react';
 import { PLATFORMS, type PlatformInfo } from '../types';
+import { Icon, PlatformIcon } from './Icon';
 
 interface URLInputProps {
   onUrlChange: (url: string, platform: string | null) => void;
@@ -41,6 +42,7 @@ function detectPlatform(url: string): string | null {
 export const URLInput: FC<URLInputProps> = ({ onUrlChange, disabled }) => {
   const [url, setUrl] = useState('');
   const [detectedPlatform, setDetectedPlatform] = useState<PlatformInfo | null>(null);
+  const [platformKey, setPlatformKey] = useState<string | null>(null);
 
   const handleChange = useCallback(
     (e: ChangeEvent<HTMLInputElement>) => {
@@ -50,6 +52,7 @@ export const URLInput: FC<URLInputProps> = ({ onUrlChange, disabled }) => {
       const platform = detectPlatform(newUrl);
       const platformInfo = platform ? PLATFORMS[platform] : null;
       setDetectedPlatform(platformInfo);
+      setPlatformKey(platform);
 
       onUrlChange(newUrl, platform);
     },
@@ -67,6 +70,7 @@ export const URLInput: FC<URLInputProps> = ({ onUrlChange, disabled }) => {
         const platform = detectPlatform(newUrl);
         const platformInfo = platform ? PLATFORMS[platform] : null;
         setDetectedPlatform(platformInfo);
+        setPlatformKey(platform);
 
         onUrlChange(newUrl, platform);
       }, 0);
@@ -77,6 +81,7 @@ export const URLInput: FC<URLInputProps> = ({ onUrlChange, disabled }) => {
   const handleClear = useCallback(() => {
     setUrl('');
     setDetectedPlatform(null);
+    setPlatformKey(null);
     onUrlChange('', null);
   }, [onUrlChange]);
 
@@ -95,11 +100,11 @@ export const URLInput: FC<URLInputProps> = ({ onUrlChange, disabled }) => {
         />
 
         {/* Platform indicator */}
-        {detectedPlatform && (
+        {detectedPlatform && platformKey && (
           <div
-            className={`absolute right-12 top-1/2 -translate-y-1/2 flex items-center gap-1 ${detectedPlatform.color}`}
+            className={`absolute right-12 top-1/2 -translate-y-1/2 flex items-center gap-1.5 ${detectedPlatform.color}`}
           >
-            <span>{detectedPlatform.icon}</span>
+            <PlatformIcon platform={platformKey} size="sm" />
             <span className="text-sm font-medium hidden sm:inline">
               {detectedPlatform.name}
             </span>
@@ -111,34 +116,22 @@ export const URLInput: FC<URLInputProps> = ({ onUrlChange, disabled }) => {
           <button
             type="button"
             onClick={handleClear}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-text-muted hover:text-text-primary hover:bg-surface-tertiary rounded transition-colors"
             disabled={disabled}
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <Icon name="x" size="sm" />
           </button>
         )}
       </div>
 
       {/* Supported platforms hint */}
       {!url && (
-        <div className="mt-2 flex items-center justify-center gap-4 text-gray-500 text-sm">
+        <div className="mt-2 flex items-center justify-center gap-4 text-text-muted text-sm">
           <span>Supported:</span>
-          {Object.values(PLATFORMS).map((platform) => (
-            <span key={platform.name} className="flex items-center gap-1">
-              {platform.icon} {platform.name}
+          {Object.entries(PLATFORMS).map(([key, platform]) => (
+            <span key={platform.name} className="flex items-center gap-1.5">
+              <PlatformIcon platform={key} size="sm" className={platform.color} />
+              <span>{platform.name}</span>
             </span>
           ))}
         </div>

@@ -118,7 +118,10 @@ class DownloadProgress:
 
         if status == "started":
             pp_name = d.get("postprocessor", "")
-            if "FFmpeg" in pp_name or "Audio" in pp_name:
+            if "VideoConvertor" in pp_name:
+                self.status = JobStatus.CONVERTING
+                self.current_stage = "Converting to H.264/AAC for compatibility..."
+            elif "FFmpeg" in pp_name or "Audio" in pp_name:
                 self.status = JobStatus.CONVERTING
                 self.current_stage = "Converting format..."
             else:
@@ -185,10 +188,46 @@ class DownloadService:
         }
 
         if output_format == OutputFormat.VIDEO:
-            # Best video + audio, merge to mp4
+            # Best H.264 video + AAC audio for maximum compatibility (especially QuickTime)
+            # QuickTime only supports H.264/H.265 video and AAC audio codecs
+            # VP9, AV1, Opus, Vorbis are NOT supported by QuickTime
+            #
+            # Format priority (strongly prefer H.264/AAC to avoid re-encoding):
+            # 1. Best H.264 video (avc1 codec) + AAC audio (mp4a codec) - native QuickTime support
+            # 2. Best H.264 video + best audio
+            # 3. Fallback to any format (will be re-encoded to H.264/AAC)
             opts.update({
-                "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best",
+                "format": (
+                    # First priority: H.264 video + AAC audio (ideal for QuickTime)
+                    "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
+                    # Second: H.264 video + any audio
+                    "bestvideo[vcodec^=avc1]+bestaudio/"
+                    # Third: Any MP4 video (excluding VP9/AV1) + any audio
+                    "bestvideo[ext=mp4][vcodec!^=vp9][vcodec!^=vp09][vcodec!^=av01]+bestaudio/"
+                    # Last resort: best available (will be re-encoded)
+                    "bestvideo+bestaudio/best"
+                ),
                 "merge_output_format": "mp4",
+                # Re-encode to H.264/AAC for guaranteed QuickTime compatibility
+                # FFmpegVideoConvertor ensures the final output is properly encoded
+                "postprocessors": [{
+                    "key": "FFmpegVideoConvertor",
+                    "preferedformat": "mp4",
+                }],
+                # FFmpeg args to ensure H.264/AAC output (QuickTime compatible)
+                # Keys must be lowercase: https://github.com/yt-dlp/yt-dlp/issues/1843
+                "postprocessor_args": {
+                    # Arguments for the VideoConvertor postprocessor
+                    "videoconvertor": [
+                        "-c:v", "libx264",       # H.264 video codec (QuickTime compatible)
+                        "-preset", "medium",     # Balance between speed and compression
+                        "-crf", "23",            # Good quality (lower = better, 18-28 typical)
+                        "-c:a", "aac",           # AAC audio codec (QuickTime compatible)
+                        "-b:a", "192k",          # Audio bitrate
+                        "-movflags", "+faststart",  # Optimize for streaming/progressive playback
+                        "-pix_fmt", "yuv420p",   # Pixel format compatible with most players
+                    ],
+                },
             })
         elif output_format == OutputFormat.AUDIO_MP3:
             opts.update({

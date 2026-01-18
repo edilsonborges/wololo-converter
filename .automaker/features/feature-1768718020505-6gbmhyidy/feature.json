@@ -1,0 +1,32 @@
+{
+  "category": "Uncategorized",
+  "description": "## Parent Task Context (Already Completed)\n\n> **Note:** The following parent task has already been completed. This context is provided to help you understand the background and requirements for this sub-task. Do not re-implement the parent task - focus only on the new sub-task described below.\n\n### Fix YouTube download functionality\n\n**Description:** youtube download is not working\n\n---\n\n## Task Description\n\nstill error, the video downloads but it can play\n\nThis file contains some media which isn’t compatible with QuickTime Player.",
+  "title": "Fix video compatibility for downloaded YouTube files",
+  "images": [],
+  "imagePaths": [],
+  "textFilePaths": [],
+  "skipTests": true,
+  "model": "opus",
+  "thinkingLevel": "none",
+  "reasoningEffort": "none",
+  "priority": 2,
+  "planningMode": "skip",
+  "requirePlanApproval": false,
+  "dependencies": [
+    "feature-1768660397311-ou33saqes"
+  ],
+  "workMode": "current",
+  "titleGenerating": false,
+  "status": "verified",
+  "id": "feature-1768718020505-6gbmhyidy",
+  "descriptionHistory": [
+    {
+      "description": "## Parent Task Context (Already Completed)\n\n> **Note:** The following parent task has already been completed. This context is provided to help you understand the background and requirements for this sub-task. Do not re-implement the parent task - focus only on the new sub-task described below.\n\n### Fix YouTube download functionality\n\n**Description:** youtube download is not working\n\n---\n\n## Task Description\n\nstill error, the video downloads but it can play\n\nThis file contains some media which isn’t compatible with QuickTime Player.",
+      "timestamp": "2026-01-18T06:33:40.598Z",
+      "source": "initial"
+    }
+  ],
+  "startedAt": "2026-01-18T06:33:46.353Z",
+  "updatedAt": "2026-01-18T06:36:57.288Z",
+  "justFinishedAt": "2026-01-18T06:36:57.288Z"
+}

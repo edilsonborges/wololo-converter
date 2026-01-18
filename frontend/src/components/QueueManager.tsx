@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, type FC, type DragEvent } from 'react';
 import type { QueueItem, QueueConfig, QueueProcessingMode, JobStatus } from '../types';
 import { PLATFORMS } from '../types';
+import { Icon, PlatformIcon } from './Icon';
 
 interface QueueManagerProps {
   items: QueueItem[];
@@ -15,11 +16,11 @@ interface QueueManagerProps {
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  pending: { bg: 'bg-gray-600', text: 'text-gray-300', label: 'Pending' },
-  active: { bg: 'bg-blue-500', text: 'text-blue-400', label: 'Downloading' },
-  completed: { bg: 'bg-green-500', text: 'text-green-400', label: 'Completed' },
-  failed: { bg: 'bg-red-500', text: 'text-red-400', label: 'Failed' },
-  cancelled: { bg: 'bg-gray-500', text: 'text-gray-400', label: 'Cancelled' },
+  pending: { bg: 'bg-surface-tertiary', text: 'text-text-secondary', label: 'Pending' },
+  active: { bg: 'bg-info-light', text: 'text-info-text', label: 'Downloading' },
+  completed: { bg: 'bg-success-light', text: 'text-success-text', label: 'Completed' },
+  failed: { bg: 'bg-error-light', text: 'text-error-text', label: 'Failed' },
+  cancelled: { bg: 'bg-surface-tertiary', text: 'text-text-muted', label: 'Cancelled' },
 };
 
 const JOB_STATUS_MAP: Record<JobStatus, string> = {
@@ -129,25 +130,23 @@ export const QueueManager: FC<QueueManagerProps> = ({
         onDragLeave={handleDragLeave}
         onDrop={(e) => handleDrop(e, index)}
         className={`
-          relative p-3 rounded-lg bg-gray-700/50 border border-gray-600
+          relative p-3 rounded-lg bg-surface-secondary border border-border-light
           ${isDraggable && item.status === 'pending' ? 'cursor-grab active:cursor-grabbing' : ''}
-          ${dragOverIndex === index ? 'border-orange-500 border-2' : ''}
+          ${dragOverIndex === index ? 'border-accent border-2' : ''}
           transition-all duration-200
         `}
       >
         <div className="flex items-start gap-3">
           {/* Drag handle for pending items */}
           {isDraggable && item.status === 'pending' && (
-            <div className="flex-shrink-0 text-gray-500 mt-1">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
-              </svg>
+            <div className="flex-shrink-0 text-text-muted mt-1">
+              <Icon name="gripHorizontal" size="sm" />
             </div>
           )}
 
           {/* Platform icon */}
-          <div className={`flex-shrink-0 text-xl ${platformInfo?.color || 'text-gray-400'}`}>
-            {platformInfo?.icon || '?'}
+          <div className={`flex-shrink-0 ${platformInfo?.color || 'text-text-muted'}`}>
+            <PlatformIcon platform={item.platform || ''} size="md" />
           </div>
 
           {/* Content */}
@@ -157,28 +156,28 @@ export const QueueManager: FC<QueueManagerProps> = ({
                 {progress ? JOB_STATUS_MAP[progress.status] || statusStyle.label : statusStyle.label}
               </span>
               {item.progress?.title && (
-                <span className="text-sm text-white font-medium truncate">
+                <span className="text-sm text-text-primary font-medium truncate">
                   {item.progress.title}
                 </span>
               )}
             </div>
-            <div className="text-sm text-gray-400 truncate">
+            <div className="text-sm text-text-muted truncate">
               {item.url}
             </div>
 
             {/* Progress bar for active items */}
             {showProgress && (
               <div className="mt-2">
-                <div className="flex justify-between text-xs text-gray-400 mb-1">
+                <div className="flex justify-between text-xs text-text-muted mb-1">
                   <span>{Math.round(progress.progress)}%</span>
                   <div className="flex items-center gap-2">
                     {progress.speed && <span>{progress.speed}</span>}
                     {progress.eta && <span>ETA: {progress.eta}</span>}
                   </div>
                 </div>
-                <div className="h-2 bg-gray-600 rounded-full overflow-hidden">
+                <div className="h-2 bg-border rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-red-500 via-orange-500 to-yellow-500 transition-all duration-300"
+                    className="h-full bg-accent transition-all duration-300"
                     style={{ width: `${progress.progress}%` }}
                   />
                 </div>
@@ -187,7 +186,7 @@ export const QueueManager: FC<QueueManagerProps> = ({
 
             {/* Error message for failed items */}
             {item.status === 'failed' && item.error && (
-              <div className="mt-2 text-xs text-red-400">
+              <div className="mt-2 text-xs text-error-text">
                 {item.error}
               </div>
             )}
@@ -199,12 +198,10 @@ export const QueueManager: FC<QueueManagerProps> = ({
             {item.status === 'completed' && item.jobId && (
               <button
                 onClick={() => onDownload(item.jobId!)}
-                className="p-1.5 text-green-400 hover:bg-green-400/20 rounded transition-colors"
+                className="p-1.5 text-success hover:bg-success-light rounded transition-colors"
                 title="Download file"
               >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
+                <Icon name="download" size="sm" />
               </button>
             )}
 
@@ -212,12 +209,10 @@ export const QueueManager: FC<QueueManagerProps> = ({
             {item.status === 'failed' && (
               <button
                 onClick={() => onRetry(item.id)}
-                className="p-1.5 text-yellow-400 hover:bg-yellow-400/20 rounded transition-colors"
+                className="p-1.5 text-warning hover:bg-warning-light rounded transition-colors"
                 title="Retry download"
               >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
+                <Icon name="refreshCw" size="sm" />
               </button>
             )}
 
@@ -225,12 +220,10 @@ export const QueueManager: FC<QueueManagerProps> = ({
             {item.status === 'active' && (
               <button
                 onClick={() => onCancel(item.id)}
-                className="p-1.5 text-red-400 hover:bg-red-400/20 rounded transition-colors"
+                className="p-1.5 text-error hover:bg-error-light rounded transition-colors"
                 title="Cancel download"
               >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <Icon name="x" size="sm" />
               </button>
             )}
 
@@ -238,12 +231,10 @@ export const QueueManager: FC<QueueManagerProps> = ({
             {(item.status === 'pending' || item.status === 'cancelled' || item.status === 'failed' || item.status === 'completed') && (
               <button
                 onClick={() => onRemove(item.id)}
-                className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-400/10 rounded transition-colors"
+                className="p-1.5 text-text-muted hover:text-error hover:bg-error-light rounded transition-colors"
                 title="Remove from queue"
               >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
+                <Icon name="trash2" size="sm" />
               </button>
             )}
           </div>
@@ -260,17 +251,17 @@ export const QueueManager: FC<QueueManagerProps> = ({
     <div className="card space-y-4">
       {/* Header with config */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <h2 className="text-lg font-semibold text-white">Download Queue</h2>
+        <h2 className="text-lg font-semibold text-text-primary">Download Queue</h2>
 
         {/* Processing mode toggle */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-gray-700 rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-surface-tertiary rounded-lg p-1">
             <button
               onClick={() => handleModeChange('sequential')}
               className={`px-3 py-1 text-sm rounded-md transition-colors ${
                 config.processingMode === 'sequential'
-                  ? 'bg-orange-500 text-white'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-white text-text-primary shadow-sm'
+                  : 'text-text-muted hover:text-text-primary'
               }`}
             >
               Sequential
@@ -279,8 +270,8 @@ export const QueueManager: FC<QueueManagerProps> = ({
               onClick={() => handleModeChange('parallel')}
               className={`px-3 py-1 text-sm rounded-md transition-colors ${
                 config.processingMode === 'parallel'
-                  ? 'bg-orange-500 text-white'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-white text-text-primary shadow-sm'
+                  : 'text-text-muted hover:text-text-primary'
               }`}
             >
               Parallel
@@ -290,19 +281,19 @@ export const QueueManager: FC<QueueManagerProps> = ({
           {/* Concurrent count for parallel mode */}
           {config.processingMode === 'parallel' && (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-400">Max:</span>
+              <span className="text-sm text-text-muted">Max:</span>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => handleConcurrentChange(config.maxConcurrent - 1)}
-                  className="w-6 h-6 flex items-center justify-center rounded bg-gray-700 text-gray-400 hover:text-white hover:bg-gray-600 transition-colors"
+                  className="w-6 h-6 flex items-center justify-center rounded bg-surface-tertiary text-text-muted hover:text-text-primary hover:bg-border-light transition-colors"
                   disabled={config.maxConcurrent <= 1}
                 >
                   -
                 </button>
-                <span className="w-6 text-center text-sm text-white">{config.maxConcurrent}</span>
+                <span className="w-6 text-center text-sm text-text-primary">{config.maxConcurrent}</span>
                 <button
                   onClick={() => handleConcurrentChange(config.maxConcurrent + 1)}
-                  className="w-6 h-6 flex items-center justify-center rounded bg-gray-700 text-gray-400 hover:text-white hover:bg-gray-600 transition-colors"
+                  className="w-6 h-6 flex items-center justify-center rounded bg-surface-tertiary text-text-muted hover:text-text-primary hover:bg-border-light transition-colors"
                   disabled={config.maxConcurrent >= 5}
                 >
                   +
@@ -316,21 +307,21 @@ export const QueueManager: FC<QueueManagerProps> = ({
       {/* Queue stats */}
       <div className="flex items-center gap-4 text-sm">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-gray-500"></span>
-          <span className="text-gray-400">Pending: {pendingItems.length}</span>
+          <span className="w-2 h-2 rounded-full bg-text-muted"></span>
+          <span className="text-text-muted">Pending: {pendingItems.length}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-          <span className="text-gray-400">Active: {activeItems.length}</span>
+          <span className="w-2 h-2 rounded-full bg-info animate-pulse"></span>
+          <span className="text-text-muted">Active: {activeItems.length}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-green-500"></span>
-          <span className="text-gray-400">Completed: {completedItems.length}</span>
+          <span className="w-2 h-2 rounded-full bg-success"></span>
+          <span className="text-text-muted">Completed: {completedItems.length}</span>
         </div>
         {completedItems.length > 0 && (
           <button
             onClick={onClearCompleted}
-            className="ml-auto text-xs text-gray-400 hover:text-white transition-colors"
+            className="ml-auto text-xs text-text-muted hover:text-text-primary transition-colors"
           >
             Clear completed
           </button>
@@ -342,7 +333,7 @@ export const QueueManager: FC<QueueManagerProps> = ({
         {/* Active downloads */}
         {activeItems.length > 0 && (
           <div className="space-y-2">
-            <h3 className="text-sm font-medium text-blue-400">Active</h3>
+            <h3 className="text-sm font-medium text-info-text">Active</h3>
             <div className="space-y-2">
               {items.filter((i) => i.status === 'active').map((item) =>
                 renderQueueItem(item, items.indexOf(item), false)
@@ -354,9 +345,9 @@ export const QueueManager: FC<QueueManagerProps> = ({
         {/* Pending items - draggable */}
         {pendingItems.length > 0 && (
           <div className="space-y-2">
-            <h3 className="text-sm font-medium text-gray-400 flex items-center gap-2">
+            <h3 className="text-sm font-medium text-text-muted flex items-center gap-2">
               Pending
-              <span className="text-xs text-gray-500">(drag to reorder)</span>
+              <span className="text-xs text-text-muted">(drag to reorder)</span>
             </h3>
             <div className="space-y-2">
               {items.filter((i) => i.status === 'pending').map((item) =>
@@ -369,8 +360,8 @@ export const QueueManager: FC<QueueManagerProps> = ({
         {/* Completed/Failed items */}
         {completedItems.length > 0 && (
           <div className="space-y-2">
-            <h3 className="text-sm font-medium text-gray-500">History</h3>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
+            <h3 className="text-sm font-medium text-text-muted">History</h3>
+            <div className="space-y-2 max-h-48 overflow-y-auto queue-scrollbar">
               {items.filter((i) => ['completed', 'failed', 'cancelled'].includes(i.status)).map((item) =>
                 renderQueueItem(item, items.indexOf(item), false)
               )}

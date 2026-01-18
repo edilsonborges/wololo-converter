@@ -1,3 +1,5 @@
+import type { IconName } from './components/Icon';
+
 // API Types
 export type OutputFormat = 'video' | 'audio_mp3' | 'audio_m4a';
 
@@ -51,51 +53,58 @@ export interface HealthResponse {
 // Platform info
 export interface PlatformInfo {
   name: string;
-  icon: string;
+  icon: IconName;
   color: string;
 }
 
 export const PLATFORMS: Record<string, PlatformInfo> = {
   youtube: {
     name: 'YouTube',
-    icon: '📺',
-    color: 'text-red-500',
+    icon: 'youtube',
+    color: 'text-platform-youtube',
   },
   instagram: {
     name: 'Instagram',
-    icon: '📷',
-    color: 'text-pink-500',
+    icon: 'instagram',
+    color: 'text-platform-instagram',
   },
   facebook: {
     name: 'Facebook',
-    icon: '👍',
-    color: 'text-blue-500',
+    icon: 'facebook',
+    color: 'text-platform-facebook',
   },
   twitter: {
     name: 'Twitter/X',
-    icon: '🐦',
-    color: 'text-sky-400',
+    icon: 'twitter',
+    color: 'text-platform-twitter',
   },
 };
 
-export const FORMAT_OPTIONS = [
+export interface FormatOption {
+  value: OutputFormat;
+  label: string;
+  description: string;
+  icon: IconName;
+}
+
+export const FORMAT_OPTIONS: FormatOption[] = [
   {
-    value: 'video' as OutputFormat,
+    value: 'video',
     label: 'Video (Best Quality)',
     description: 'MP4 format, up to 4K',
-    icon: '🎬',
+    icon: 'video',
   },
   {
-    value: 'audio_mp3' as OutputFormat,
+    value: 'audio_mp3',
     label: 'Audio (MP3)',
     description: 'MP3 320kbps',
-    icon: '🎵',
+    icon: 'music',
   },
   {
-    value: 'audio_m4a' as OutputFormat,
+    value: 'audio_m4a',
     label: 'Audio (M4A)',
     description: 'AAC audio, better quality',
-    icon: '🎶',
+    icon: 'music2',
   },
 ];
 
