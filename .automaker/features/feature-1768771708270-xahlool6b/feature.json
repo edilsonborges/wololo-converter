@@ -1,0 +1,29 @@
+{
+  "category": "Uncategorized",
+  "description": "for instagram and facebook i am still getting this:\nThis file contains some media which isn’t compatible with QuickTime Player.\n\nbut twitter and youtube are working just fine.\n",
+  "title": "Fix media compatibility with Instagram and Facebook",
+  "images": [],
+  "imagePaths": [],
+  "textFilePaths": [],
+  "skipTests": false,
+  "model": "opus",
+  "thinkingLevel": "none",
+  "reasoningEffort": "none",
+  "priority": 2,
+  "planningMode": "skip",
+  "requirePlanApproval": false,
+  "dependencies": [],
+  "workMode": "current",
+  "titleGenerating": false,
+  "status": "verified",
+  "id": "feature-1768771708270-xahlool6b",
+  "descriptionHistory": [
+    {
+      "description": "for instagram and facebook i am still getting this:\nThis file contains some media which isn’t compatible with QuickTime Player.\n\nbut twitter and youtube are working just fine.\n",
+      "timestamp": "2026-01-18T21:28:28.381Z",
+      "source": "initial"
+    }
+  ],
+  "startedAt": "2026-01-18T21:28:28.418Z",
+  "updatedAt": "2026-01-18T21:32:00.984Z"
+}

@@ -118,7 +118,7 @@ class DownloadProgress:
 
         if status == "started":
             pp_name = d.get("postprocessor", "")
-            if "VideoConvertor" in pp_name:
+            if "VideoConvertor" in pp_name or "CopyStream" in pp_name:
                 self.status = JobStatus.CONVERTING
                 self.current_stage = "Converting to H.264/AAC for compatibility..."
             elif "FFmpeg" in pp_name or "Audio" in pp_name:
@@ -208,17 +208,20 @@ class DownloadService:
                     "bestvideo+bestaudio/best"
                 ),
                 "merge_output_format": "mp4",
-                # Re-encode to H.264/AAC for guaranteed QuickTime compatibility
-                # FFmpegVideoConvertor ensures the final output is properly encoded
+                # CRITICAL: Use FFmpegCopyStream instead of FFmpegVideoConvertor
+                # FFmpegVideoConvertor skips re-encoding if the container is already MP4,
+                # even if the codec is incompatible (VP9, AV1, HEVC).
+                # FFmpegCopyStream ALWAYS applies the FFmpeg arguments, ensuring
+                # proper H.264/AAC encoding for QuickTime compatibility.
+                # This fixes Instagram and Facebook videos which often use VP9/HEVC.
                 "postprocessors": [{
-                    "key": "FFmpegVideoConvertor",
-                    "preferedformat": "mp4",
+                    "key": "FFmpegCopyStream",
                 }],
                 # FFmpeg args to ensure H.264/AAC output (QuickTime compatible)
                 # Keys must be lowercase: https://github.com/yt-dlp/yt-dlp/issues/1843
                 "postprocessor_args": {
-                    # Arguments for the VideoConvertor postprocessor
-                    "videoconvertor": [
+                    # Arguments for the CopyStream postprocessor - ALWAYS re-encodes
+                    "copystream": [
                         "-c:v", "libx264",       # H.264 video codec (QuickTime compatible)
                         "-preset", "medium",     # Balance between speed and compression
                         "-crf", "23",            # Good quality (lower = better, 18-28 typical)

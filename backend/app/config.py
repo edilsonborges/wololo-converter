@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     app_name: str = "Wololo Converter"
     debug: bool = False
     host: str = "0.0.0.0"
-    port: int = 8000
+    port: int = 47652
 
     # File storage
     temp_dir: Path = Path("/tmp/wololo")
@@ -48,9 +48,9 @@ class Settings(BaseSettings):
     # CORS origins (for development)
     cors_origins: list[str] = [
         "http://localhost:3000",
-        "http://localhost:5173",
+        "http://localhost:47651",
         "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
+        "http://127.0.0.1:47651",
     ]
 
     class Config:

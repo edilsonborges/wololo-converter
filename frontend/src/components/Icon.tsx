@@ -104,7 +104,7 @@ interface PlatformIconProps {
 const platformIconMap: Record<string, IconName> = {
   youtube: 'youtube',
   instagram: 'instagram',
-  facebook: 'facebook',
+  // facebook: 'facebook', // Facebook temporarily hidden - not working
   twitter: 'twitter',
 };
 

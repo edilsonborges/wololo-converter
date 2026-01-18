@@ -33,8 +33,8 @@ RUN mkdir -p /tmp/wololo
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# Expose port
-EXPOSE 8000
+# Expose port (unique port)
+EXPOSE 47652
 
 # Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "47652"]

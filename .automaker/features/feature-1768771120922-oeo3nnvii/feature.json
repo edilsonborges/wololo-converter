@@ -1,0 +1,29 @@
+{
+  "category": "Uncategorized",
+  "description": "- use the images of wololo left and wololo right (png) and put them each side of the title\n- get rid of the button mp4 / audio / audio2 because i just wanna download the video\n- the list of last download should be the last on in the first the port should be a not commom one (might be a 5 numbers)",
+  "title": "Add side images and simplify download interface",
+  "images": [],
+  "imagePaths": [],
+  "textFilePaths": [],
+  "skipTests": false,
+  "model": "opus",
+  "thinkingLevel": "none",
+  "reasoningEffort": "none",
+  "priority": 2,
+  "planningMode": "skip",
+  "requirePlanApproval": false,
+  "dependencies": [],
+  "workMode": "current",
+  "titleGenerating": false,
+  "status": "verified",
+  "id": "feature-1768771120922-oeo3nnvii",
+  "descriptionHistory": [
+    {
+      "description": "- use the images of wololo left and wololo right (png) and put them each side of the title\n- get rid of the button mp4 / audio / audio2 because i just wanna download the video\n- the list of last download should be the last on in the first the port should be a not commom one (might be a 5 numbers)",
+      "timestamp": "2026-01-18T21:18:41.018Z",
+      "source": "initial"
+    }
+  ],
+  "startedAt": "2026-01-18T21:18:49.681Z",
+  "updatedAt": "2026-01-18T21:22:57.176Z"
+}

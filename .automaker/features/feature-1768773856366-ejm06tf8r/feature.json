@@ -1,0 +1,30 @@
+{
+  "category": "Uncategorized",
+  "description": "frontend port should be an unique one as well (maybe one number lower)\n",
+  "title": "Update frontend port to unique incremented number",
+  "images": [],
+  "imagePaths": [],
+  "textFilePaths": [],
+  "skipTests": true,
+  "model": "opus",
+  "thinkingLevel": "none",
+  "reasoningEffort": "none",
+  "priority": 2,
+  "planningMode": "skip",
+  "requirePlanApproval": false,
+  "dependencies": [],
+  "workMode": "current",
+  "titleGenerating": false,
+  "status": "waiting_approval",
+  "id": "feature-1768773856366-ejm06tf8r",
+  "descriptionHistory": [
+    {
+      "description": "frontend port should be an unique one as well (maybe one number lower)\n",
+      "timestamp": "2026-01-18T22:04:16.475Z",
+      "source": "initial"
+    }
+  ],
+  "startedAt": "2026-01-18T22:04:16.510Z",
+  "updatedAt": "2026-01-18T22:07:14.517Z",
+  "justFinishedAt": "2026-01-18T22:07:14.517Z"
+}

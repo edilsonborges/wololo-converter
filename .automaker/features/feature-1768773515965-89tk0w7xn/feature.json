@@ -1,0 +1,30 @@
+{
+  "category": "Uncategorized",
+  "description": "esconder icone do facebook por enquanto. Nao esta funcionando",
+  "title": "Hide Facebook icon temporarily",
+  "images": [],
+  "imagePaths": [],
+  "textFilePaths": [],
+  "skipTests": true,
+  "model": "opus",
+  "thinkingLevel": "none",
+  "reasoningEffort": "none",
+  "priority": 2,
+  "planningMode": "skip",
+  "requirePlanApproval": false,
+  "dependencies": [],
+  "workMode": "current",
+  "titleGenerating": false,
+  "status": "waiting_approval",
+  "id": "feature-1768773515965-89tk0w7xn",
+  "descriptionHistory": [
+    {
+      "description": "esconder icone do facebook por enquanto. Nao esta funcionando",
+      "timestamp": "2026-01-18T21:58:36.090Z",
+      "source": "initial"
+    }
+  ],
+  "startedAt": "2026-01-18T21:58:36.140Z",
+  "updatedAt": "2026-01-18T22:00:07.842Z",
+  "justFinishedAt": "2026-01-18T22:00:07.842Z"
+}

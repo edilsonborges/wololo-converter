@@ -357,12 +357,12 @@ export const QueueManager: FC<QueueManagerProps> = ({
           </div>
         )}
 
-        {/* Completed/Failed items */}
+        {/* Completed/Failed items - newest first */}
         {completedItems.length > 0 && (
           <div className="space-y-2">
             <h3 className="text-sm font-medium text-text-muted">History</h3>
             <div className="space-y-2 max-h-48 overflow-y-auto queue-scrollbar">
-              {items.filter((i) => ['completed', 'failed', 'cancelled'].includes(i.status)).map((item) =>
+              {items.filter((i) => ['completed', 'failed', 'cancelled'].includes(i.status)).reverse().map((item) =>
                 renderQueueItem(item, items.indexOf(item), false)
               )}
             </div>

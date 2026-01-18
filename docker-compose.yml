@@ -17,9 +17,9 @@ services:
       - backend_data:/app/data
       - temp_downloads:/tmp/wololo
     ports:
-      - "8000:8000"
+      - "47652:47652"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:47652/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -32,7 +32,7 @@ services:
     container_name: wololo-frontend
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "47651:47651"
     depends_on:
       - backend
 

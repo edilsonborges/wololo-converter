@@ -17,11 +17,12 @@ const PLATFORM_PATTERNS: Record<string, RegExp[]> = {
   instagram: [
     /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:p|reel|tv)\/[\w-]+/i,
   ],
-  facebook: [
-    /(?:https?:\/\/)?(?:www\.)?facebook\.com\/.+\/videos\/\d+/i,
-    /(?:https?:\/\/)?(?:www\.)?facebook\.com\/watch\/?\?v=\d+/i,
-    /(?:https?:\/\/)?fb\.watch\/[\w-]+/i,
-  ],
+  // Facebook temporarily hidden - not working
+  // facebook: [
+  //   /(?:https?:\/\/)?(?:www\.)?facebook\.com\/.+\/videos\/\d+/i,
+  //   /(?:https?:\/\/)?(?:www\.)?facebook\.com\/watch\/?\?v=\d+/i,
+  //   /(?:https?:\/\/)?fb\.watch\/[\w-]+/i,
+  // ],
   twitter: [
     /(?:https?:\/\/)?(?:www\.)?(?:twitter|x)\.com\/\w+\/status\/\d+/i,
   ],
@@ -93,7 +94,7 @@ export const URLInput: FC<URLInputProps> = ({ onUrlChange, disabled }) => {
           value={url}
           onChange={handleChange}
           onPaste={handlePaste}
-          placeholder="Paste a YouTube, Instagram, Facebook, or Twitter/X URL..."
+          placeholder="Paste a YouTube, Instagram, or Twitter/X URL..."
           className="input-field pr-24"
           disabled={disabled}
           autoFocus

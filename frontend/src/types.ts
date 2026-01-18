@@ -1,7 +1,7 @@
 import type { IconName } from './components/Icon';
 
 // API Types
-export type OutputFormat = 'video' | 'audio_mp3' | 'audio_m4a';
+export type OutputFormat = 'video';
 
 export type JobStatus =
   | 'queued'
@@ -68,11 +68,12 @@ export const PLATFORMS: Record<string, PlatformInfo> = {
     icon: 'instagram',
     color: 'text-platform-instagram',
   },
-  facebook: {
-    name: 'Facebook',
-    icon: 'facebook',
-    color: 'text-platform-facebook',
-  },
+  // Facebook temporarily hidden - not working
+  // facebook: {
+  //   name: 'Facebook',
+  //   icon: 'facebook',
+  //   color: 'text-platform-facebook',
+  // },
   twitter: {
     name: 'Twitter/X',
     icon: 'twitter',
@@ -93,18 +94,6 @@ export const FORMAT_OPTIONS: FormatOption[] = [
     label: 'Video (Best Quality)',
     description: 'MP4 format, up to 4K',
     icon: 'video',
-  },
-  {
-    value: 'audio_mp3',
-    label: 'Audio (MP3)',
-    description: 'MP3 320kbps',
-    icon: 'music',
-  },
-  {
-    value: 'audio_m4a',
-    label: 'Audio (M4A)',
-    description: 'AAC audio, better quality',
-    icon: 'music2',
   },
 ];
 

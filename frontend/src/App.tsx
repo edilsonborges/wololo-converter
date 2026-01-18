@@ -1,12 +1,10 @@
 import { useState, useCallback } from 'react';
-import { MultiURLInput, FormatSelector, QueueManager, Icon, type ParsedURL } from './components';
+import { MultiURLInput, QueueManager, Icon, type ParsedURL } from './components';
 import { useQueueManager } from './hooks/useQueueManager';
-import type { OutputFormat } from './types';
 
 function App() {
   // Form state
   const [parsedUrls, setParsedUrls] = useState<ParsedURL[]>([]);
-  const [format, setFormat] = useState<OutputFormat>('video');
   const [resetTrigger, setResetTrigger] = useState(0);
 
   // Queue manager hook
@@ -27,21 +25,18 @@ function App() {
     setParsedUrls(urls);
   }, []);
 
-  const handleFormatChange = useCallback((newFormat: OutputFormat) => {
-    setFormat(newFormat);
-  }, []);
-
   const handleAddToQueue = useCallback(() => {
     const validUrls = parsedUrls.filter((u) => u.isValid);
     if (validUrls.length === 0) return;
 
-    const added = addToQueue(parsedUrls, format);
+    // Always use 'video' format since we only support video now
+    const added = addToQueue(parsedUrls, 'video');
     if (added > 0) {
       // Clear the input after adding to queue
       setParsedUrls([]);
       setResetTrigger((prev) => prev + 1);
     }
-  }, [parsedUrls, format, addToQueue]);
+  }, [parsedUrls, addToQueue]);
 
   const validUrlCount = parsedUrls.filter((u) => u.isValid).length;
   const canAddToQueue = validUrlCount > 0;
@@ -51,11 +46,23 @@ function App() {
       {/* Header */}
       <header className="py-8 px-4 border-b border-border-light">
         <div className="max-w-2xl mx-auto text-center">
-          <h1 className="text-4xl sm:text-5xl font-semibold text-text-primary tracking-tight">
-            Wololo Converter
-          </h1>
+          <div className="flex items-center justify-center gap-4">
+            <img
+              src="/wololo-left.png"
+              alt="Wololo Left"
+              className="w-16 h-16 sm:w-20 sm:h-20 object-contain"
+            />
+            <h1 className="text-4xl sm:text-5xl font-semibold text-text-primary tracking-tight">
+              Wololo Converter
+            </h1>
+            <img
+              src="/wololo-right.png"
+              alt="Wololo Right"
+              className="w-16 h-16 sm:w-20 sm:h-20 object-contain"
+            />
+          </div>
           <p className="mt-3 text-text-tertiary">
-            Download videos and audio from YouTube, Instagram, Facebook, and Twitter/X
+            Download videos from YouTube, Instagram, and Twitter/X
           </p>
         </div>
       </header>
@@ -67,13 +74,6 @@ function App() {
           <div className="card space-y-6">
             {/* Multi-URL Input */}
             <MultiURLInput onUrlsChange={handleUrlsChange} disabled={false} resetTrigger={resetTrigger} />
-
-            {/* Format Selector */}
-            <FormatSelector
-              selectedFormat={format}
-              onFormatChange={handleFormatChange}
-              disabled={false}
-            />
 
             {/* Add to queue button */}
             <button
