@@ -44,7 +44,7 @@ describe('FormatSelector', () => {
 
   it('should highlight the selected format', () => {
     const onChange = vi.fn()
-    const { container } = render(<FormatSelector selectedFormat="audio_mp3" onFormatChange={onChange} />)
+    render(<FormatSelector selectedFormat="audio_mp3" onFormatChange={onChange} />)
 
     // The selected button should have the accent border class
     const mp3Button = screen.getByText('MP3').closest('button')

@@ -10,9 +10,9 @@ test.describe('Wololo Converter App', () => {
   })
 
   test('should display supported platforms', async ({ page }) => {
-    await expect(page.getByText('YouTube')).toBeVisible()
-    await expect(page.getByText('Instagram')).toBeVisible()
-    await expect(page.getByText('Twitter/X')).toBeVisible()
+    await expect(page.getByText('YouTube', { exact: true })).toBeVisible()
+    await expect(page.getByText('Instagram', { exact: true })).toBeVisible()
+    await expect(page.getByText('Twitter/X', { exact: true })).toBeVisible()
   })
 
   test('should show empty queue message', async ({ page }) => {
