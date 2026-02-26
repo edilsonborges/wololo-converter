@@ -23,8 +23,12 @@ class JobStatus(str, Enum):
 class OutputFormat(str, Enum):
     """Output format options"""
     VIDEO = "video"
+    VIDEO_WEBM = "video_webm"
     AUDIO_MP3 = "audio_mp3"
     AUDIO_M4A = "audio_m4a"
+    AUDIO_WAV = "audio_wav"
+    AUDIO_FLAC = "audio_flac"
+    AUDIO_OGG = "audio_ogg"
 
 
 class DownloadJob(Base):

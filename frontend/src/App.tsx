@@ -1,10 +1,12 @@
 import { useState, useCallback } from 'react';
-import { MultiURLInput, QueueManager, Icon, type ParsedURL } from './components';
+import { MultiURLInput, QueueManager, FormatSelector, Icon, type ParsedURL } from './components';
 import { useQueueManager } from './hooks/useQueueManager';
+import type { OutputFormat } from './types';
 
 function App() {
   // Form state
   const [parsedUrls, setParsedUrls] = useState<ParsedURL[]>([]);
+  const [selectedFormat, setSelectedFormat] = useState<OutputFormat>('video');
   const [resetTrigger, setResetTrigger] = useState(0);
 
   // Queue manager hook
@@ -29,8 +31,7 @@ function App() {
     const validUrls = parsedUrls.filter((u) => u.isValid);
     if (validUrls.length === 0) return;
 
-    // Always use 'video' format since we only support video now
-    const added = addToQueue(parsedUrls, 'video');
+    const added = addToQueue(parsedUrls, selectedFormat);
     if (added > 0) {
       // Clear the input after adding to queue
       setParsedUrls([]);
@@ -74,6 +75,12 @@ function App() {
           <div className="card space-y-6">
             {/* Multi-URL Input */}
             <MultiURLInput onUrlsChange={handleUrlsChange} disabled={false} resetTrigger={resetTrigger} />
+
+            {/* Format Selector */}
+            <FormatSelector
+              selectedFormat={selectedFormat}
+              onFormatChange={setSelectedFormat}
+            />
 
             {/* Add to queue button */}
             <button

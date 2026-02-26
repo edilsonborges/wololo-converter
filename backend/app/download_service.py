@@ -103,8 +103,8 @@ class DownloadProgress:
                 self._notify()
 
         elif status == "finished":
-            self.current_stage = "Processing..."
-            self.progress = 95
+            self.current_stage = "Download complete, preparing conversion..."
+            self.progress = 88
             self._notify()
 
         elif status == "error":
@@ -120,12 +120,27 @@ class DownloadProgress:
             pp_name = d.get("postprocessor", "")
             if "VideoConvertor" in pp_name or "CopyStream" in pp_name:
                 self.status = JobStatus.CONVERTING
-                self.current_stage = "Converting to H.264/AAC for compatibility..."
+                self.current_stage = "Converting video..."
+                self.progress = 90
+                self.speed = None
+                self.eta = None
+            elif "ExtractAudio" in pp_name:
+                self.status = JobStatus.CONVERTING
+                self.current_stage = "Extracting audio..."
+                self.progress = 90
+                self.speed = None
+                self.eta = None
             elif "FFmpeg" in pp_name or "Audio" in pp_name:
                 self.status = JobStatus.CONVERTING
                 self.current_stage = "Converting format..."
+                self.progress = 90
             else:
                 self.current_stage = f"Processing ({pp_name})..."
+            self._notify()
+
+        elif status == "processing":
+            # FFmpeg progress update during conversion
+            self.progress = min(95, 90 + (d.get("progress", 0) or 0) * 5 / 100)
             self._notify()
 
         elif status == "finished":
@@ -189,46 +204,48 @@ class DownloadService:
 
         if output_format == OutputFormat.VIDEO:
             # Best H.264 video + AAC audio for maximum compatibility (especially QuickTime)
-            # QuickTime only supports H.264/H.265 video and AAC audio codecs
-            # VP9, AV1, Opus, Vorbis are NOT supported by QuickTime
-            #
-            # Format priority (strongly prefer H.264/AAC to avoid re-encoding):
-            # 1. Best H.264 video (avc1 codec) + AAC audio (mp4a codec) - native QuickTime support
-            # 2. Best H.264 video + best audio
-            # 3. Fallback to any format (will be re-encoded to H.264/AAC)
             opts.update({
                 "format": (
-                    # First priority: H.264 video + AAC audio (ideal for QuickTime)
                     "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
-                    # Second: H.264 video + any audio
                     "bestvideo[vcodec^=avc1]+bestaudio/"
-                    # Third: Any MP4 video (excluding VP9/AV1) + any audio
                     "bestvideo[ext=mp4][vcodec!^=vp9][vcodec!^=vp09][vcodec!^=av01]+bestaudio/"
-                    # Last resort: best available (will be re-encoded)
                     "bestvideo+bestaudio/best"
                 ),
                 "merge_output_format": "mp4",
-                # CRITICAL: Use FFmpegCopyStream instead of FFmpegVideoConvertor
-                # FFmpegVideoConvertor skips re-encoding if the container is already MP4,
-                # even if the codec is incompatible (VP9, AV1, HEVC).
-                # FFmpegCopyStream ALWAYS applies the FFmpeg arguments, ensuring
-                # proper H.264/AAC encoding for QuickTime compatibility.
-                # This fixes Instagram and Facebook videos which often use VP9/HEVC.
                 "postprocessors": [{
                     "key": "FFmpegCopyStream",
                 }],
-                # FFmpeg args to ensure H.264/AAC output (QuickTime compatible)
-                # Keys must be lowercase: https://github.com/yt-dlp/yt-dlp/issues/1843
                 "postprocessor_args": {
-                    # Arguments for the CopyStream postprocessor - ALWAYS re-encodes
                     "copystream": [
-                        "-c:v", "libx264",       # H.264 video codec (QuickTime compatible)
-                        "-preset", "medium",     # Balance between speed and compression
-                        "-crf", "23",            # Good quality (lower = better, 18-28 typical)
-                        "-c:a", "aac",           # AAC audio codec (QuickTime compatible)
-                        "-b:a", "192k",          # Audio bitrate
-                        "-movflags", "+faststart",  # Optimize for streaming/progressive playback
-                        "-pix_fmt", "yuv420p",   # Pixel format compatible with most players
+                        "-c:v", "libx264",
+                        "-preset", "fast",          # Faster encoding (was medium)
+                        "-crf", "23",
+                        "-threads", "0",             # Use all available CPU cores
+                        "-c:a", "aac",
+                        "-b:a", "192k",
+                        "-movflags", "+faststart",
+                        "-pix_fmt", "yuv420p",
+                    ],
+                },
+            })
+        elif output_format == OutputFormat.VIDEO_WEBM:
+            opts.update({
+                "format": (
+                    "bestvideo[ext=webm]+bestaudio[ext=webm]/"
+                    "bestvideo+bestaudio/best"
+                ),
+                "merge_output_format": "webm",
+                "postprocessors": [{
+                    "key": "FFmpegCopyStream",
+                }],
+                "postprocessor_args": {
+                    "copystream": [
+                        "-c:v", "libvpx-vp9",
+                        "-crf", "30",
+                        "-b:v", "0",
+                        "-threads", "0",
+                        "-c:a", "libopus",
+                        "-b:a", "128k",
                     ],
                 },
             })
@@ -247,6 +264,33 @@ class DownloadService:
                 "postprocessors": [{
                     "key": "FFmpegExtractAudio",
                     "preferredcodec": "m4a",
+                    "preferredquality": "320",
+                }],
+            })
+        elif output_format == OutputFormat.AUDIO_WAV:
+            opts.update({
+                "format": "bestaudio/best",
+                "postprocessors": [{
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "wav",
+                    "preferredquality": "0",
+                }],
+            })
+        elif output_format == OutputFormat.AUDIO_FLAC:
+            opts.update({
+                "format": "bestaudio/best",
+                "postprocessors": [{
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "flac",
+                    "preferredquality": "0",
+                }],
+            })
+        elif output_format == OutputFormat.AUDIO_OGG:
+            opts.update({
+                "format": "bestaudio/best",
+                "postprocessors": [{
+                    "key": "FFmpegExtractAudio",
+                    "preferredcodec": "vorbis",
                     "preferredquality": "320",
                 }],
             })

@@ -1,7 +1,7 @@
 import type { IconName } from './components/Icon';
 
 // API Types
-export type OutputFormat = 'video';
+export type OutputFormat = 'video' | 'video_webm' | 'audio_mp3' | 'audio_m4a' | 'audio_wav' | 'audio_flac' | 'audio_ogg';
 
 export type JobStatus =
   | 'queued'
@@ -91,9 +91,45 @@ export interface FormatOption {
 export const FORMAT_OPTIONS: FormatOption[] = [
   {
     value: 'video',
-    label: 'Video (Best Quality)',
-    description: 'MP4 format, up to 4K',
+    label: 'MP4 Video',
+    description: 'H.264, up to 4K',
     icon: 'video',
+  },
+  {
+    value: 'video_webm',
+    label: 'WebM Video',
+    description: 'VP9, open format',
+    icon: 'video',
+  },
+  {
+    value: 'audio_mp3',
+    label: 'MP3',
+    description: 'Audio 320kbps',
+    icon: 'music',
+  },
+  {
+    value: 'audio_m4a',
+    label: 'M4A',
+    description: 'AAC audio 320kbps',
+    icon: 'music2',
+  },
+  {
+    value: 'audio_wav',
+    label: 'WAV',
+    description: 'Lossless audio',
+    icon: 'music',
+  },
+  {
+    value: 'audio_flac',
+    label: 'FLAC',
+    description: 'Lossless compressed',
+    icon: 'music2',
+  },
+  {
+    value: 'audio_ogg',
+    label: 'OGG',
+    description: 'Vorbis audio',
+    icon: 'music',
   },
 ];
 

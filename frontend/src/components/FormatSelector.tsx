@@ -18,7 +18,7 @@ export const FormatSelector: FC<FormatSelectorProps> = ({
       <label className="block text-sm font-medium text-text-secondary">
         Output Format
       </label>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {FORMAT_OPTIONS.map((option) => (
           <button
             key={option.value}
@@ -26,7 +26,7 @@ export const FormatSelector: FC<FormatSelectorProps> = ({
             onClick={() => onFormatChange(option.value)}
             disabled={disabled}
             className={`
-              relative p-4 rounded-lg border-2 text-left transition-all duration-200
+              relative p-3 rounded-lg border-2 text-left transition-all duration-200
               ${
                 selectedFormat === option.value
                   ? 'border-accent bg-accent-light'
@@ -35,22 +35,21 @@ export const FormatSelector: FC<FormatSelectorProps> = ({
               ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
             `}
           >
-            <div className="flex items-start gap-3">
+            <div className="flex items-center gap-2">
               <div className={`${selectedFormat === option.value ? 'text-accent' : 'text-text-tertiary'}`}>
-                <Icon name={option.icon} size="lg" />
+                <Icon name={option.icon} size="md" />
               </div>
-              <div>
-                <div className={`font-medium ${selectedFormat === option.value ? 'text-accent' : 'text-text-primary'}`}>
+              <div className="min-w-0">
+                <div className={`font-medium text-sm ${selectedFormat === option.value ? 'text-accent' : 'text-text-primary'}`}>
                   {option.label}
                 </div>
-                <div className="text-sm text-text-muted">{option.description}</div>
+                <div className="text-xs text-text-muted truncate">{option.description}</div>
               </div>
             </div>
 
-            {/* Selected indicator */}
             {selectedFormat === option.value && (
-              <div className="absolute top-2 right-2 text-accent">
-                <Icon name="checkCircle" size="sm" />
+              <div className="absolute top-1.5 right-1.5 text-accent">
+                <Icon name="checkCircle" size="xs" />
               </div>
             )}
           </button>

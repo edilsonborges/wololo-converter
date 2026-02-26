@@ -124,15 +124,19 @@ export const PlatformIcon: FC<PlatformIconProps> = ({
 
 // Format-specific icon component
 interface FormatIconProps {
-  format: 'video' | 'audio_mp3' | 'audio_m4a';
+  format: 'video' | 'video_webm' | 'audio_mp3' | 'audio_m4a' | 'audio_wav' | 'audio_flac' | 'audio_ogg';
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
 }
 
 const formatIconMap: Record<string, IconName> = {
   video: 'video',
+  video_webm: 'video',
   audio_mp3: 'music',
   audio_m4a: 'music2',
+  audio_wav: 'music',
+  audio_flac: 'music2',
+  audio_ogg: 'music',
 };
 
 export const FormatIcon: FC<FormatIconProps> = ({
