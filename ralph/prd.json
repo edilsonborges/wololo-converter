@@ -135,8 +135,8 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Created QualitySelector component with horizontal radio buttons (360p/480p/720p/1080p/MP3). Accepts availableQualities prop to disable resolutions above video's real quality. Disabled options show gray style with tooltip. MP3 always enabled. Removed old FormatSelector component and tests. Updated App.tsx and component index."
     },
     {
       "id": "US-009",
