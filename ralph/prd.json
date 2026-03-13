@@ -1,0 +1,178 @@
+{
+  "project": "Wololo Converter",
+  "branchName": "ralph/quality-selection-and-progress",
+  "description": "Seleção de qualidade de vídeo (360p/480p/720p/1080p/MP3), preview com thumbnail, progresso linear e performance de conversão",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Endpoint de preview/metadata do vídeo",
+      "description": "As a developer, I need a POST /api/preview endpoint that returns video metadata (title, thumbnail, available resolutions, duration) without downloading.",
+      "acceptanceCriteria": [
+        "New endpoint POST /api/preview accepts { url: string } and returns { title, thumbnail_url, duration, available_qualities: number[] }",
+        "Uses yt-dlp extract_info(download=False) to get metadata",
+        "Parses available formats and returns unique resolutions from [360, 480, 720, 1080] that exist in the video",
+        "Returns error response if URL is invalid or video unavailable",
+        "Add Pydantic schemas: PreviewRequest and PreviewResponse",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Added PreviewRequest/PreviewResponse schemas, POST /api/preview endpoint using yt-dlp extract_info, and extract_video_preview helper function"
+    },
+    {
+      "id": "US-002",
+      "title": "Backend - novo campo quality no DownloadRequest",
+      "description": "As a developer, I need the download endpoint to accept a quality field instead of output_format so users can choose video resolution or MP3.",
+      "acceptanceCriteria": [
+        "Add VideoQuality enum to models.py: '360p', '480p', '720p', '1080p', 'mp3'",
+        "Update DownloadRequest schema to accept 'quality' field (type VideoQuality, default '480p')",
+        "Keep 'output_format' field as optional for backward compatibility but mark as deprecated",
+        "Update DownloadJob model if needed to store quality",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-003",
+      "title": "Backend - yt-dlp format selector por qualidade",
+      "description": "As a developer, I need get_yt_dlp_options to use height-based format selectors so videos download at the selected resolution.",
+      "acceptanceCriteria": [
+        "Update get_yt_dlp_options to accept quality parameter instead of output_format",
+        "For video qualities (360p/480p/720p/1080p): use format 'bestvideo[height<=N][vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[height<=N]+bestaudio/best[height<=N]' where N is the resolution number",
+        "For mp3: use format 'bestaudio/best' with FFmpegExtractAudio postprocessor, codec mp3, quality 320",
+        "For video: use merge_output_format 'mp4' and FFmpegCopyStream postprocessor",
+        "Update _run_download and start_download to pass quality through",
+        "Update routes.py to pass quality from request to download service",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-004",
+      "title": "Backend - evitar re-encoding desnecessário",
+      "description": "As a developer, I want to skip FFmpeg re-encoding when the downloaded stream is already H.264+AAC compatible with MP4.",
+      "acceptanceCriteria": [
+        "For video downloads: use '-c copy' in postprocessor_args when possible instead of '-c:v libx264'",
+        "Set postprocessor_args to copy streams by default: ['-c', 'copy', '-movflags', '+faststart']",
+        "Only fallback to re-encoding if copy fails (yt-dlp handles this with format selection preferring avc1+mp4a)",
+        "For MP3: if source audio is already mp3, FFmpegExtractAudio should copy without re-encoding (yt-dlp does this automatically with preferredcodec)",
+        "Add '-threads 0' to postprocessor_args for cases that need re-encoding",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-005",
+      "title": "Backend - progresso linear por fases proporcionais",
+      "description": "As a developer, I need progress tracking to report linear progress proportional to real time in each phase instead of hardcoded jumps.",
+      "acceptanceCriteria": [
+        "Remove hardcoded progress values (88%, 90%, 95%, 98%) from progress_hook and postprocessor_hook",
+        "Download phase reports 0-70% proportional to downloaded bytes",
+        "When download finishes (status='finished'), set progress to 70% instead of 88%",
+        "Conversion/postprocessor phase reports 70-95% proportional to FFmpeg progress",
+        "If no re-encoding needed (copy stream), jump from 70% to 95% quickly since it's fast",
+        "Finalization sets 95-100%",
+        "Never stay stuck at same percentage for more than 5 seconds - if no FFmpeg progress update, interpolate by incrementing 1% every 2 seconds during conversion phase",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-006",
+      "title": "Frontend - tipos e API client atualizados",
+      "description": "As a developer, I need to update TypeScript types and API client to support the new quality-based flow and preview endpoint.",
+      "acceptanceCriteria": [
+        "Add type VideoQuality = '360p' | '480p' | '720p' | '1080p' | 'mp3' to types.ts",
+        "Add interface PreviewResponse { title: string; thumbnail_url: string; duration: number; available_qualities: number[] } to types.ts",
+        "Update DownloadRequest interface to use quality: VideoQuality instead of output_format",
+        "Update QueueItem interface to use quality: VideoQuality instead of format: OutputFormat",
+        "Add fetchPreview(url: string): Promise<PreviewResponse> function to api.ts",
+        "Remove FORMAT_OPTIONS array and FormatOption interface from types.ts",
+        "Remove OutputFormat type (no longer needed)",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-007",
+      "title": "Frontend - componente de preview com thumbnail",
+      "description": "As a user, I want to see the video thumbnail and title after pasting a link, so I can confirm it's the right video.",
+      "acceptanceCriteria": [
+        "Create VideoPreview component that receives PreviewResponse data and displays: thumbnail (16:9 aspect ratio), title, formatted duration",
+        "Show loading skeleton while preview is being fetched",
+        "Show error state if video is unavailable",
+        "Component appears below URL input area, above quality selector",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-008",
+      "title": "Frontend - radio buttons de qualidade",
+      "description": "As a user, I want simple horizontal radio buttons (360p, 480p, 720p, 1080p, MP3) to choose download quality.",
+      "acceptanceCriteria": [
+        "Create QualitySelector component with horizontal radio buttons: 360p, 480p, 720p, 1080p, MP3",
+        "Default selected: 480p",
+        "Accepts availableQualities prop (number array from preview) to disable resolutions above the video's real quality",
+        "Disabled options show gray style with title tooltip 'Qualidade não disponível para este vídeo'",
+        "If no preview loaded yet, all video options are enabled",
+        "MP3 option is always enabled",
+        "Remove old FormatSelector component",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-009",
+      "title": "Frontend - integrar preview e quality no App.tsx",
+      "description": "As a user, I want the full flow: paste URL, see thumbnail, pick quality, add to queue.",
+      "acceptanceCriteria": [
+        "In App.tsx: when a single valid URL is detected, call fetchPreview with 500ms debounce",
+        "Show VideoPreview component with the result between URL input and quality selector",
+        "Replace FormatSelector with QualitySelector, passing available_qualities from preview",
+        "Update handleAddToQueue to pass quality instead of format",
+        "For multiple URLs: skip preview, show URL list as before, all quality options enabled",
+        "Update selectedFormat state to selectedQuality with type VideoQuality and default '480p'",
+        "Update useQueueManager hook to use quality instead of format in addToQueue",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "US-010",
+      "title": "Frontend - progresso suave na barra",
+      "description": "As a user, I want the progress bar to advance smoothly without jumping to 99% and freezing.",
+      "acceptanceCriteria": [
+        "In ProgressCard or useQueueManager: implement client-side progress smoothing",
+        "If progress jumps more than 10% in a single update, animate incrementally (1% per 100ms) to the new value",
+        "If no progress update received for 5 seconds during active download/conversion, interpolate by adding 0.5% every second (capped at 95%)",
+        "Reset interpolation timer on each real progress update",
+        "Keep existing CSS transition on progress bar width",
+        "Typecheck passes",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

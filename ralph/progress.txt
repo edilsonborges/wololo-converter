@@ -1,0 +1,21 @@
+# Ralph Progress - Quality Selection and Progress
+# Branch: ralph/quality-selection-and-progress
+# Started: 2026-03-13
+
+## Codebase Patterns
+- Backend schemas in `backend/app/schemas.py`, routes in `backend/app/routes.py`, download logic in `backend/app/download_service.py`
+- yt-dlp runs in ThreadPoolExecutor (not async-native), use `loop.run_in_executor(executor, ...)` for async endpoints
+- Pydantic v2 with `field_validator` and `model_validate`
+- Routes use slowapi rate limiter and async SQLAlchemy sessions
+
+## 2026-03-13 - US-001
+- Implemented POST /api/preview endpoint returning video metadata (title, thumbnail, duration, available_qualities)
+- Added PreviewRequest and PreviewResponse Pydantic schemas
+- Added extract_video_preview() function in download_service.py using yt-dlp extract_info(download=False)
+- Parses formats to find unique resolutions from [360, 480, 720, 1080]
+- Files changed: backend/app/schemas.py, backend/app/routes.py, backend/app/download_service.py
+- **Learnings for future iterations:**
+  - executor is already defined at module level in download_service.py, can be imported
+  - validate_url() from utils.py validates URL and returns (is_valid, platform, error)
+  - yt-dlp format info has `height` field for video resolution detection
+---
