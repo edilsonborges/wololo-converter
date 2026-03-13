@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from .config import settings
 from .models import JobStatus, OutputFormat, VideoQuality, DownloadJob
 from .schemas import JobProgressUpdate
-from .utils import get_safe_filepath, sanitize_filename, validate_url
+from .utils import get_safe_filepath, sanitize_filename, validate_url, detect_platform
 
 
 # Thread pool for running yt-dlp (it's not async-native)
@@ -229,6 +229,7 @@ class DownloadService:
         job_id: str,
         quality: VideoQuality,
         progress: DownloadProgress,
+        url: str = "",
     ) -> dict:
         """Get yt-dlp options based on quality selection"""
         # Base output path
@@ -257,6 +258,11 @@ class DownloadService:
             # Restrict to HTTPS
             "prefer_insecure": False,
         }
+
+        # Use browser cookies for platforms that require auth (e.g. Instagram)
+        platform = detect_platform(url) if url else None
+        if platform in ("instagram",) and settings.cookies_from_browser:
+            opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
 
         if quality == VideoQuality.MP3:
             opts.update({
@@ -306,7 +312,7 @@ class DownloadService:
         progress: DownloadProgress,
     ) -> dict:
         """Run the actual download (blocking, runs in thread pool)"""
-        opts = self.get_yt_dlp_options(job_id, quality, progress)
+        opts = self.get_yt_dlp_options(job_id, quality, progress, url)
 
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
@@ -465,6 +471,11 @@ def extract_video_preview(url: str) -> dict:
         "socket_timeout": 15,
     }
 
+    # Use browser cookies for platforms that require auth (e.g. Instagram)
+    platform = detect_platform(url)
+    if platform in ("instagram",) and settings.cookies_from_browser:
+        opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
+
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -488,10 +499,14 @@ def extract_video_preview(url: str) -> dict:
                 if height >= q:
                     available.add(q)
 
+    duration = info.get("duration")
+    if duration is not None:
+        duration = int(duration)
+
     return {
         "title": info.get("title", "Unknown"),
         "thumbnail_url": info.get("thumbnail"),
-        "duration": info.get("duration"),
+        "duration": duration,
         "available_qualities": sorted(available),
     }
 

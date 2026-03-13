@@ -128,7 +128,7 @@ function App() {
             />
           </div>
           <p className="mt-3 text-text-tertiary">
-            Download videos from YouTube, Instagram, and Twitter/X
+            Download videos from YouTube and Twitter/X
           </p>
         </div>
       </header>
@@ -147,15 +147,18 @@ function App() {
                 preview={preview}
                 isLoading={previewLoading}
                 error={previewError}
+                selectedQuality={selectedQuality}
               />
             )}
 
-            {/* Quality Selector */}
-            <QualitySelector
-              selectedQuality={selectedQuality}
-              onQualityChange={setSelectedQuality}
-              availableQualities={isSingleUrl && preview ? preview.available_qualities : undefined}
-            />
+            {/* Quality Selector - only when there's a valid URL */}
+            {canAddToQueue && (
+              <QualitySelector
+                selectedQuality={selectedQuality}
+                onQualityChange={setSelectedQuality}
+                availableQualities={isSingleUrl && preview ? preview.available_qualities : undefined}
+              />
+            )}
 
             {/* Add to queue button */}
             <button
@@ -210,6 +213,7 @@ function App() {
       {/* Footer */}
       <footer className="py-6 px-4 text-center text-text-muted text-sm border-t border-border-light">
         <p>Personal use only. Respect copyright and platform terms of service.</p>
+        <p className="mt-1 text-text-muted/50 text-xs">v0.5.0</p>
       </footer>
     </div>
   );

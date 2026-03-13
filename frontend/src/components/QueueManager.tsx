@@ -156,6 +156,17 @@ export const QueueManager: FC<QueueManagerProps> = ({
               <span className={`text-xs px-2 py-0.5 rounded-full ${statusStyle.bg} ${statusStyle.text}`}>
                 {progress ? JOB_STATUS_MAP[progress.status] || statusStyle.label : statusStyle.label}
               </span>
+              {item.quality === 'mp3' ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 text-xs font-medium">
+                  <Icon name="music" size="xs" />
+                  MP3
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-xs font-medium">
+                  <Icon name="video" size="xs" />
+                  {item.quality}
+                </span>
+              )}
               {item.progress?.title && (
                 <span className="text-sm text-text-primary font-medium truncate">
                   {item.progress.title}
