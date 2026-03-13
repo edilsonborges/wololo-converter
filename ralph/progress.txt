@@ -139,3 +139,19 @@
   - VideoPreview returns null when no preview/loading/error, so wrapping in `{isSingleUrl && ...}` is extra safety
   - `availableQualities={undefined}` makes QualitySelector enable all options (no preview constraint)
 ---
+
+## 2026-03-13 - US-010
+- Created `useSmoothedProgress` hook: smooths raw progress values with two strategies
+  - Large jumps (>10%): animates incrementally at 1% per 100ms to the target value
+  - Stall detection: if no real update for 5 seconds during active state, interpolates +0.5%/s (capped at 95%)
+  - Resets interpolation timer on each real SSE progress update
+- Created `SmoothProgressBar` component wrapping the hook with configurable height, text size, and bar color
+- Updated `QueueManager` to use SmoothProgressBar in renderQueueItem
+- Updated `ProgressCard` to use SmoothProgressBar (replaces inline progress bar)
+- Kept existing CSS `transition-all duration-300 ease-out` on the bar width
+- Files changed: frontend/src/hooks/useSmoothedProgress.ts (new), frontend/src/components/SmoothProgressBar.tsx (new), frontend/src/components/QueueManager.tsx, frontend/src/components/ProgressCard.tsx, frontend/src/components/index.ts
+- **Learnings for future iterations:**
+  - renderQueueItem in QueueManager is a function (not a component), so hooks can't be used directly inside it — wrapping progress display in a component solves this
+  - SmoothProgressBar is reusable anywhere progress display is needed
+  - Interpolation interval clears itself on unmount via useEffect cleanup
+---
