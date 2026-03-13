@@ -1,13 +1,21 @@
-import { useState, useCallback } from 'react';
-import { MultiURLInput, QueueManager, QualitySelector, Icon, type ParsedURL } from './components';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { MultiURLInput, QueueManager, QualitySelector, VideoPreview, Icon, type ParsedURL } from './components';
 import { useQueueManager } from './hooks/useQueueManager';
-import type { VideoQuality } from './types';
+import { api } from './api';
+import type { VideoQuality, PreviewResponse } from './types';
 
 function App() {
   // Form state
   const [parsedUrls, setParsedUrls] = useState<ParsedURL[]>([]);
-  const [selectedFormat, setSelectedFormat] = useState<VideoQuality>('480p');
+  const [selectedQuality, setSelectedQuality] = useState<VideoQuality>('480p');
   const [resetTrigger, setResetTrigger] = useState(0);
+
+  // Preview state
+  const [preview, setPreview] = useState<PreviewResponse | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPreviewUrlRef = useRef<string | null>(null);
 
   // Queue manager hook
   const {
@@ -27,20 +35,77 @@ function App() {
     setParsedUrls(urls);
   }, []);
 
+  // Fetch preview when a single valid URL is detected (500ms debounce)
+  useEffect(() => {
+    const validUrls = parsedUrls.filter((u) => u.isValid);
+
+    // Only fetch preview for a single URL
+    if (validUrls.length !== 1) {
+      // Clear preview when not exactly one URL
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      setPreview(null);
+      setPreviewLoading(false);
+      setPreviewError(null);
+      lastPreviewUrlRef.current = null;
+      return;
+    }
+
+    const url = validUrls[0].url;
+
+    // Skip if we already fetched preview for this URL
+    if (url === lastPreviewUrlRef.current) return;
+
+    // Clear previous debounce
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      lastPreviewUrlRef.current = url;
+      setPreviewLoading(true);
+      setPreviewError(null);
+      setPreview(null);
+
+      try {
+        const result = await api.fetchPreview(url);
+        setPreview(result);
+      } catch (err) {
+        setPreviewError(
+          err instanceof Error ? err.message : 'Não foi possível carregar o preview'
+        );
+      } finally {
+        setPreviewLoading(false);
+      }
+    }, 500);
+
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [parsedUrls]);
+
   const handleAddToQueue = useCallback(() => {
     const validUrls = parsedUrls.filter((u) => u.isValid);
     if (validUrls.length === 0) return;
 
-    const added = addToQueue(parsedUrls, selectedFormat);
+    const added = addToQueue(parsedUrls, selectedQuality);
     if (added > 0) {
-      // Clear the input after adding to queue
+      // Clear the input and preview after adding to queue
       setParsedUrls([]);
+      setPreview(null);
+      setPreviewError(null);
+      lastPreviewUrlRef.current = null;
       setResetTrigger((prev) => prev + 1);
     }
-  }, [parsedUrls, addToQueue]);
+  }, [parsedUrls, addToQueue, selectedQuality]);
 
   const validUrlCount = parsedUrls.filter((u) => u.isValid).length;
   const canAddToQueue = validUrlCount > 0;
+  const isSingleUrl = validUrlCount === 1;
 
   return (
     <div className="min-h-screen bg-white">
@@ -76,10 +141,20 @@ function App() {
             {/* Multi-URL Input */}
             <MultiURLInput onUrlsChange={handleUrlsChange} disabled={false} resetTrigger={resetTrigger} />
 
+            {/* Video Preview (single URL only) */}
+            {isSingleUrl && (
+              <VideoPreview
+                preview={preview}
+                isLoading={previewLoading}
+                error={previewError}
+              />
+            )}
+
             {/* Quality Selector */}
             <QualitySelector
-              selectedQuality={selectedFormat}
-              onQualityChange={setSelectedFormat}
+              selectedQuality={selectedQuality}
+              onQualityChange={setSelectedQuality}
+              availableQualities={isSingleUrl && preview ? preview.available_qualities : undefined}
             />
 
             {/* Add to queue button */}
