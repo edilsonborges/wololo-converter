@@ -100,8 +100,8 @@
         "Typecheck passes"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added VideoQuality type and PreviewResponse interface. Updated DownloadRequest to use quality field, QueueItem to use quality instead of format. Added fetchPreview to api.ts. Removed OutputFormat, FormatOption, FORMAT_OPTIONS. Updated FormatSelector to use VideoQuality with 5 quality options. Updated tests."
     },
     {
       "id": "US-007",

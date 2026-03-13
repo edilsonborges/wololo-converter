@@ -8,6 +8,11 @@
 - Pydantic v2 with `field_validator` and `model_validate`
 - Routes use slowapi rate limiter and async SQLAlchemy sessions
 - VideoQuality enum in models.py: Q_360P, Q_480P, Q_720P, Q_1080P, MP3
+- Frontend VideoQuality type: '360p' | '480p' | '720p' | '1080p' | 'mp3'
+- Frontend DownloadRequest uses `quality: VideoQuality` (not output_format)
+- Frontend QueueItem uses `quality: VideoQuality` (not format: OutputFormat)
+- api.ts has `fetchPreview(url)` for POST /api/preview
+- FormatSelector component now uses VideoQuality (will be replaced by QualitySelector in US-008)
 - DownloadRequest has `quality: VideoQuality` (default Q_480P) and deprecated `output_format`
 - `get_yt_dlp_options` now accepts `quality: VideoQuality` — video uses height-based format + `-c copy`, MP3 uses FFmpegExtractAudio
 - `start_download` and `_run_download` accept `quality: VideoQuality` (not `output_format`)
@@ -73,4 +78,21 @@
   - Progress phases defined as class constants (DOWNLOAD_MAX=70, CONVERSION_MIN=70, CONVERSION_MAX=95) for easy tuning
   - threading.Timer with daemon=True avoids blocking process exit
   - time.monotonic() is preferred over time.time() for elapsed duration tracking
+---
+
+## 2026-03-13 - US-006
+- Added `VideoQuality` type and `PreviewResponse` interface to types.ts
+- Updated `DownloadRequest` to use `quality: VideoQuality` instead of `output_format: OutputFormat`
+- Updated `QueueItem` to use `quality: VideoQuality` instead of `format: OutputFormat`
+- Added `fetchPreview(url)` function to api.ts (POST /api/preview)
+- Removed `OutputFormat` type, `FormatOption` interface, and `FORMAT_OPTIONS` array
+- Updated `FormatSelector` component to use `VideoQuality` with 5 quality options (360p/480p/720p/1080p/MP3)
+- Updated `useQueueManager` to use `quality` instead of `format`
+- Updated `App.tsx` to use `VideoQuality` with default `'480p'`
+- Updated tests: types.test.ts (removed FORMAT_OPTIONS tests), FormatSelector.test.tsx, api.test.ts
+- Files changed: frontend/src/types.ts, frontend/src/api.ts, frontend/src/hooks/useQueueManager.ts, frontend/src/App.tsx, frontend/src/components/FormatSelector.tsx, frontend/src/__tests__/types.test.ts, frontend/src/__tests__/FormatSelector.test.tsx, frontend/src/__tests__/api.test.ts
+- **Learnings for future iterations:**
+  - `IconName` import in types.ts must be preserved (used by PlatformInfo)
+  - FormatSelector will be replaced by QualitySelector in US-008
+  - useQueueManager passes quality to api.startDownload via the DownloadRequest interface
 ---
