@@ -9,6 +9,8 @@
 - Routes use slowapi rate limiter and async SQLAlchemy sessions
 - VideoQuality enum in models.py: Q_360P, Q_480P, Q_720P, Q_1080P, MP3
 - DownloadRequest has `quality: VideoQuality` (default Q_480P) and deprecated `output_format`
+- `get_yt_dlp_options` now accepts `quality: VideoQuality` — video uses height-based format + `-c copy`, MP3 uses FFmpegExtractAudio
+- `start_download` and `_run_download` accept `quality: VideoQuality` (not `output_format`)
 
 ## 2026-03-13 - US-001
 - Implemented POST /api/preview endpoint returning video metadata (title, thumbnail, duration, available_qualities)
@@ -32,4 +34,18 @@
 - **Learnings for future iterations:**
   - Pydantic v2 Field supports `deprecated=True` natively, emits DeprecationWarning
   - SQLite doesn't enforce column types, so adding nullable column is safe without migration
+---
+
+## 2026-03-13 - US-003
+- Replaced `get_yt_dlp_options` to accept `VideoQuality` instead of `OutputFormat`
+- Video qualities use height-based format: `bestvideo[height<=N][vcodec^=avc1]+bestaudio[acodec^=mp4a]/bestvideo[height<=N]+bestaudio/best[height<=N]`
+- MP3 uses `bestaudio/best` with FFmpegExtractAudio (mp3, quality 320)
+- Video uses FFmpegCopyStream with `-c copy -movflags +faststart` (no re-encoding by default)
+- Updated `_run_download` and `start_download` signatures to use `quality: VideoQuality`
+- Updated `routes.py` to pass quality, with backward compat mapping from deprecated `output_format`
+- Files changed: backend/app/download_service.py, backend/app/routes.py
+- **Learnings for future iterations:**
+  - Old OutputFormat enum branches (webm, m4a, wav, flac, ogg) were removed since quality-based flow only supports mp4 video or mp3 audio
+  - Backward compat in routes maps audio output_formats to MP3, video to default quality
+  - `-c copy` avoids re-encoding when source is already avc1+mp4a compatible (relates to US-004)
 ---

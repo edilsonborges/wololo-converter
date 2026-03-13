@@ -48,8 +48,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Replaced get_yt_dlp_options to use VideoQuality instead of OutputFormat. Video qualities use height-based format selector with avc1+mp4a preference and -c copy. MP3 uses FFmpegExtractAudio. Updated _run_download, start_download, and routes.py to pass quality. Added backward compat mapping from deprecated output_format."
     },
     {
       "id": "US-004",
