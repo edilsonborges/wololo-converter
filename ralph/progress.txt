@@ -49,3 +49,15 @@
   - Backward compat in routes maps audio output_formats to MP3, video to default quality
   - `-c copy` avoids re-encoding when source is already avc1+mp4a compatible (relates to US-004)
 ---
+
+## 2026-03-13 - US-004
+- Added `-threads 0` to video postprocessor_args (copystream) for fallback re-encoding performance
+- Added `postprocessor_args` for MP3 extractaudio with `-threads 0`
+- Video already had `-c copy` + `+faststart` from US-003; format selection already prefers avc1+mp4a
+- FFmpegExtractAudio automatically copies if source is already mp3 (yt-dlp built-in behavior)
+- Files changed: backend/app/download_service.py
+- **Learnings for future iterations:**
+  - Most of US-004 was already covered by US-003's implementation
+  - `-threads 0` tells FFmpeg to auto-detect optimal thread count for re-encoding
+  - yt-dlp postprocessor_args uses dict keys matching postprocessor names (lowercase)
+---

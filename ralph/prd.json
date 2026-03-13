@@ -64,8 +64,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added -threads 0 to postprocessor_args for both video (copystream) and MP3 (extractaudio) to optimize re-encoding fallback cases. Video already uses -c copy + +faststart from US-003. MP3 FFmpegExtractAudio auto-copies if source is already mp3."
     },
     {
       "id": "US-005",
