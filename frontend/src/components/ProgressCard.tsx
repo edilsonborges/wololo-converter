@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import type { JobProgressUpdate, JobStatus } from '../types';
 import { Icon } from './Icon';
+import { SmoothProgressBar } from './SmoothProgressBar';
 
 interface ProgressCardProps {
   progress: JobProgressUpdate;
@@ -60,27 +61,16 @@ export const ProgressCard: FC<ProgressCardProps> = ({
 
       {/* Progress bar */}
       <div className="mb-4">
-        <div className="flex justify-between text-sm text-text-muted mb-2">
-          <span>{Math.round(progress.progress)}%</span>
-          <div className="flex items-center gap-4">
-            {progress.speed && <span>{progress.speed}</span>}
-            {progress.eta && <span>ETA: {progress.eta}</span>}
-          </div>
-        </div>
-        <div className="relative h-3 bg-surface-tertiary rounded-full overflow-hidden">
-          <div
-            className={`h-full transition-all duration-300 ease-out rounded-full ${
-              isComplete
-                ? 'bg-success'
-                : isFailed
-                ? 'bg-error'
-                : 'bg-accent'
-            }`}
-            style={{ width: `${progress.progress}%` }}
-          >
-            {isActive && <div className="progress-bar-shine" />}
-          </div>
-        </div>
+        <SmoothProgressBar
+          progress={progress.progress}
+          isActive={isActive}
+          speed={progress.speed}
+          eta={progress.eta}
+          heightClass="h-3"
+          textSizeClass="text-sm"
+          isComplete={isComplete}
+          isFailed={isFailed}
+        />
       </div>
 
       {/* Error message */}
