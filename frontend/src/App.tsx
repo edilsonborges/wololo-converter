@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { MultiURLInput, QueueManager, FormatSelector, Icon, type ParsedURL } from './components';
+import { MultiURLInput, QueueManager, QualitySelector, Icon, type ParsedURL } from './components';
 import { useQueueManager } from './hooks/useQueueManager';
 import type { VideoQuality } from './types';
 
@@ -76,10 +76,10 @@ function App() {
             {/* Multi-URL Input */}
             <MultiURLInput onUrlsChange={handleUrlsChange} disabled={false} resetTrigger={resetTrigger} />
 
-            {/* Format Selector */}
-            <FormatSelector
-              selectedFormat={selectedFormat}
-              onFormatChange={setSelectedFormat}
+            {/* Quality Selector */}
+            <QualitySelector
+              selectedQuality={selectedFormat}
+              onQualityChange={setSelectedFormat}
             />
 
             {/* Add to queue button */}
