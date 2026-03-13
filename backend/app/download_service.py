@@ -210,6 +210,10 @@ class DownloadService:
                     "preferredcodec": "mp3",
                     "preferredquality": "320",
                 }],
+                # -threads 0 for cases that need re-encoding (non-mp3 source)
+                "postprocessor_args": {
+                    "extractaudio": ["-threads", "0"],
+                },
             })
         else:
             # Video quality: extract resolution number from enum value
@@ -224,10 +228,14 @@ class DownloadService:
                 "postprocessors": [{
                     "key": "FFmpegCopyStream",
                 }],
+                # -c copy avoids re-encoding when source is avc1+mp4a;
+                # -threads 0 for fallback re-encoding cases;
+                # +faststart moves moov atom for streaming
                 "postprocessor_args": {
                     "copystream": [
                         "-c", "copy",
                         "-movflags", "+faststart",
+                        "-threads", "0",
                     ],
                 },
             })
