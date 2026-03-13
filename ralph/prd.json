@@ -154,8 +154,8 @@
         "Verify in browser using dev-browser skill"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Renamed selectedFormat to selectedQuality. Added fetchPreview with 500ms debounce for single valid URL. Show VideoPreview between URL input and QualitySelector. Pass available_qualities from preview to QualitySelector. Multiple URLs skip preview with all quality options enabled. Clear preview on add to queue."
     },
     {
       "id": "US-010",

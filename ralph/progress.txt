@@ -124,3 +124,18 @@
   - QualitySelector uses `availableQualities.some(q => q >= resolution)` to determine if a quality is available
   - App.tsx still uses `selectedFormat` state name — will be renamed to `selectedQuality` in US-009
 ---
+
+## 2026-03-13 - US-009
+- Renamed `selectedFormat` state to `selectedQuality` in App.tsx
+- Added fetchPreview with 500ms debounce: triggers when exactly one valid URL is detected
+- Added preview state (preview, previewLoading, previewError) with refs to avoid duplicate fetches
+- Show VideoPreview component between MultiURLInput and QualitySelector (single URL only)
+- Pass `available_qualities` from preview to QualitySelector to disable unavailable resolutions
+- For multiple URLs: skip preview, all quality options enabled (availableQualities=undefined)
+- Clear preview state when adding to queue or when URL count changes from 1
+- Files changed: frontend/src/App.tsx
+- **Learnings for future iterations:**
+  - `lastPreviewUrlRef` prevents re-fetching preview for same URL
+  - VideoPreview returns null when no preview/loading/error, so wrapping in `{isSingleUrl && ...}` is extra safety
+  - `availableQualities={undefined}` makes QualitySelector enable all options (no preview constraint)
+---
