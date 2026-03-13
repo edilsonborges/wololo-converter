@@ -13,6 +13,7 @@
 - Frontend QueueItem uses `quality: VideoQuality` (not format: OutputFormat)
 - api.ts has `fetchPreview(url)` for POST /api/preview
 - FormatSelector component now uses VideoQuality (will be replaced by QualitySelector in US-008)
+- VideoPreview component: accepts `preview: PreviewResponse | null`, `isLoading: boolean`, `error: string | null`
 - DownloadRequest has `quality: VideoQuality` (default Q_480P) and deprecated `output_format`
 - `get_yt_dlp_options` now accepts `quality: VideoQuality` — video uses height-based format + `-c copy`, MP3 uses FFmpegExtractAudio
 - `start_download` and `_run_download` accept `quality: VideoQuality` (not `output_format`)
@@ -95,4 +96,15 @@
   - `IconName` import in types.ts must be preserved (used by PlatformInfo)
   - FormatSelector will be replaced by QualitySelector in US-008
   - useQueueManager passes quality to api.startDownload via the DownloadRequest interface
+---
+
+## 2026-03-13 - US-007
+- Created VideoPreview component with three states: loading skeleton (animate-pulse), error message, and preview display
+- Preview shows thumbnail (aspect-video 16:9), title (line-clamp-2), and formatted duration (h:mm:ss or m:ss)
+- Exported from components/index.ts
+- Files changed: frontend/src/components/VideoPreview.tsx, frontend/src/components/index.ts
+- **Learnings for future iterations:**
+  - Component accepts `preview: PreviewResponse | null`, `isLoading: boolean`, `error: string | null`
+  - Returns null when no preview and not loading/error (clean conditional rendering)
+  - Will be integrated into App.tsx in US-009
 ---
