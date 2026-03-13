@@ -82,8 +82,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Rescaled progress: download=0-70%, conversion=70-95%, finalization=95-100%. Added interpolation timer that increments 1% every 2s if no FFmpeg update for 5s during conversion. CopyStream jumps 70→95 naturally since it finishes fast."
     },
     {
       "id": "US-006",

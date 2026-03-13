@@ -61,3 +61,16 @@
   - `-threads 0` tells FFmpeg to auto-detect optimal thread count for re-encoding
   - yt-dlp postprocessor_args uses dict keys matching postprocessor names (lowercase)
 ---
+
+## 2026-03-13 - US-005
+- Rescaled download progress to 0-70% (was 0-100%), download finished to 70% (was 88%)
+- Rescaled conversion/postprocessor progress to 70-95% (was 90-95%), finalization to 95% (was 98%)
+- Added interpolation timer using threading.Timer: if no FFmpeg progress update for 5 seconds during conversion, increments 1% every 2 seconds (capped at 95%)
+- Interpolation auto-starts on postprocessor "started" and stops on "finished"
+- CopyStream (no re-encoding) naturally jumps from 70% to 95% quickly since postprocessor finishes fast
+- Files changed: backend/app/download_service.py
+- **Learnings for future iterations:**
+  - Progress phases defined as class constants (DOWNLOAD_MAX=70, CONVERSION_MIN=70, CONVERSION_MAX=95) for easy tuning
+  - threading.Timer with daemon=True avoids blocking process exit
+  - time.monotonic() is preferred over time.time() for elapsed duration tracking
+---
