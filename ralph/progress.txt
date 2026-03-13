@@ -7,6 +7,8 @@
 - yt-dlp runs in ThreadPoolExecutor (not async-native), use `loop.run_in_executor(executor, ...)` for async endpoints
 - Pydantic v2 with `field_validator` and `model_validate`
 - Routes use slowapi rate limiter and async SQLAlchemy sessions
+- VideoQuality enum in models.py: Q_360P, Q_480P, Q_720P, Q_1080P, MP3
+- DownloadRequest has `quality: VideoQuality` (default Q_480P) and deprecated `output_format`
 
 ## 2026-03-13 - US-001
 - Implemented POST /api/preview endpoint returning video metadata (title, thumbnail, duration, available_qualities)
@@ -18,4 +20,16 @@
   - executor is already defined at module level in download_service.py, can be imported
   - validate_url() from utils.py validates URL and returns (is_valid, platform, error)
   - yt-dlp format info has `height` field for video resolution detection
+---
+
+## 2026-03-13 - US-002
+- Added VideoQuality enum to models.py: '360p', '480p', '720p', '1080p', 'mp3'
+- Updated DownloadRequest schema with `quality: VideoQuality` field (default 480p)
+- Kept `output_format` as Optional[OutputFormat] with deprecated=True for backward compatibility
+- Added `quality` column to DownloadJob SQLAlchemy model
+- Added `quality: Optional[VideoQuality]` to JobResponse schema
+- Files changed: backend/app/models.py, backend/app/schemas.py
+- **Learnings for future iterations:**
+  - Pydantic v2 Field supports `deprecated=True` natively, emits DeprecationWarning
+  - SQLite doesn't enforce column types, so adding nullable column is safe without migration
 ---

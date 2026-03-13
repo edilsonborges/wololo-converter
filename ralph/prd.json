@@ -31,8 +31,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Added VideoQuality enum (360p/480p/720p/1080p/mp3) to models.py, added quality field to DownloadRequest with default 480p, kept output_format as optional deprecated field, added quality column to DownloadJob model, added quality to JobResponse"
     },
     {
       "id": "US-003",
