@@ -1,5 +1,7 @@
 """Download service using yt-dlp with progress tracking"""
 import asyncio
+import time
+import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -20,6 +22,11 @@ executor = ThreadPoolExecutor(max_workers=settings.max_concurrent_downloads)
 class DownloadProgress:
     """Track download progress for a job"""
 
+    # Download phase: 0-70%, Conversion phase: 70-95%, Finalization: 95-100%
+    DOWNLOAD_MAX = 70.0
+    CONVERSION_MIN = 70.0
+    CONVERSION_MAX = 95.0
+
     def __init__(self, job_id: str, callback: Optional[Callable[[JobProgressUpdate], Any]] = None):
         self.job_id = job_id
         self.callback = callback
@@ -32,6 +39,10 @@ class DownloadProgress:
         self.filename: Optional[str] = None
         self.error_message: Optional[str] = None
         self._last_progress = -1  # Avoid spamming updates
+        # Interpolation state for conversion phase
+        self._last_real_update: float = 0.0
+        self._interpolation_timer: Optional[threading.Timer] = None
+        self._in_conversion = False
 
     def _notify(self, download_ready: bool = False):
         """Send progress update via callback"""
@@ -52,26 +63,61 @@ class DownloadProgress:
             except Exception:
                 pass
 
+    def _start_interpolation(self):
+        """Start background interpolation timer for conversion phase"""
+        self._in_conversion = True
+        self._last_real_update = time.monotonic()
+        self._schedule_interpolation()
+
+    def _schedule_interpolation(self):
+        """Schedule next interpolation tick"""
+        if not self._in_conversion:
+            return
+        self._interpolation_timer = threading.Timer(2.0, self._interpolation_tick)
+        self._interpolation_timer.daemon = True
+        self._interpolation_timer.start()
+
+    def _interpolation_tick(self):
+        """Increment progress if stuck during conversion phase"""
+        if not self._in_conversion:
+            return
+        elapsed = time.monotonic() - self._last_real_update
+        if elapsed >= 5.0 and self.progress < self.CONVERSION_MAX:
+            self.progress = min(self.progress + 1.0, self.CONVERSION_MAX)
+            self._last_progress = int(self.progress)
+            self._notify()
+        self._schedule_interpolation()
+
+    def _stop_interpolation(self):
+        """Stop the interpolation timer"""
+        self._in_conversion = False
+        if self._interpolation_timer:
+            self._interpolation_timer.cancel()
+            self._interpolation_timer = None
+
     def progress_hook(self, d: dict):
-        """yt-dlp progress hook"""
+        """yt-dlp progress hook — download phase maps to 0-70%"""
         status = d.get("status", "")
 
         if status == "downloading":
             self.status = JobStatus.DOWNLOADING
             self.current_stage = "Downloading..."
 
-            # Extract progress
+            # Extract raw progress (0-100) and scale to 0-70%
+            raw_progress = 0.0
             total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
             downloaded = d.get("downloaded_bytes", 0)
 
             if total > 0:
-                self.progress = (downloaded / total) * 100
+                raw_progress = (downloaded / total) * 100
             else:
                 # Fallback to fragment progress
                 fragment = d.get("fragment_index", 0)
                 total_frags = d.get("fragment_count", 0)
                 if total_frags > 0:
-                    self.progress = (fragment / total_frags) * 100
+                    raw_progress = (fragment / total_frags) * 100
+
+            self.progress = raw_progress * self.DOWNLOAD_MAX / 100
 
             # Extract speed
             speed = d.get("speed")
@@ -104,7 +150,7 @@ class DownloadProgress:
 
         elif status == "finished":
             self.current_stage = "Download complete, preparing conversion..."
-            self.progress = 88
+            self.progress = self.DOWNLOAD_MAX  # 70%
             self._notify()
 
         elif status == "error":
@@ -113,39 +159,49 @@ class DownloadProgress:
             self._notify()
 
     def postprocessor_hook(self, d: dict):
-        """yt-dlp postprocessor hook"""
+        """yt-dlp postprocessor hook — conversion phase maps to 70-95%"""
         status = d.get("status", "")
+        conv_range = self.CONVERSION_MAX - self.CONVERSION_MIN  # 25%
 
         if status == "started":
             pp_name = d.get("postprocessor", "")
             if "VideoConvertor" in pp_name or "CopyStream" in pp_name:
                 self.status = JobStatus.CONVERTING
                 self.current_stage = "Converting video..."
-                self.progress = 90
+                self.progress = self.CONVERSION_MIN
                 self.speed = None
                 self.eta = None
+                self._start_interpolation()
             elif "ExtractAudio" in pp_name:
                 self.status = JobStatus.CONVERTING
                 self.current_stage = "Extracting audio..."
-                self.progress = 90
+                self.progress = self.CONVERSION_MIN
                 self.speed = None
                 self.eta = None
+                self._start_interpolation()
             elif "FFmpeg" in pp_name or "Audio" in pp_name:
                 self.status = JobStatus.CONVERTING
                 self.current_stage = "Converting format..."
-                self.progress = 90
+                self.progress = self.CONVERSION_MIN
+                self._start_interpolation()
             else:
                 self.current_stage = f"Processing ({pp_name})..."
             self._notify()
 
         elif status == "processing":
-            # FFmpeg progress update during conversion
-            self.progress = min(95, 90 + (d.get("progress", 0) or 0) * 5 / 100)
+            # FFmpeg progress update during conversion: scale to 70-95%
+            ffmpeg_progress = d.get("progress", 0) or 0
+            self.progress = min(
+                self.CONVERSION_MAX,
+                self.CONVERSION_MIN + ffmpeg_progress * conv_range / 100,
+            )
+            self._last_real_update = time.monotonic()
             self._notify()
 
         elif status == "finished":
+            self._stop_interpolation()
             self.current_stage = "Finalizing..."
-            self.progress = 98
+            self.progress = self.CONVERSION_MAX  # 95%
             self._notify()
 
 
