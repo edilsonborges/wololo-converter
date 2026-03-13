@@ -8,7 +8,7 @@ import yt_dlp
 from concurrent.futures import ThreadPoolExecutor
 
 from .config import settings
-from .models import JobStatus, OutputFormat, DownloadJob
+from .models import JobStatus, OutputFormat, VideoQuality, DownloadJob
 from .schemas import JobProgressUpdate
 from .utils import get_safe_filepath, sanitize_filename, validate_url
 
@@ -171,10 +171,10 @@ class DownloadService:
     def get_yt_dlp_options(
         self,
         job_id: str,
-        output_format: OutputFormat,
+        quality: VideoQuality,
         progress: DownloadProgress,
     ) -> dict:
-        """Get yt-dlp options based on output format"""
+        """Get yt-dlp options based on quality selection"""
         # Base output path
         output_dir = settings.temp_dir / job_id
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -202,54 +202,7 @@ class DownloadService:
             "prefer_insecure": False,
         }
 
-        if output_format == OutputFormat.VIDEO:
-            # Best H.264 video + AAC audio for maximum compatibility (especially QuickTime)
-            opts.update({
-                "format": (
-                    "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
-                    "bestvideo[vcodec^=avc1]+bestaudio/"
-                    "bestvideo[ext=mp4][vcodec!^=vp9][vcodec!^=vp09][vcodec!^=av01]+bestaudio/"
-                    "bestvideo+bestaudio/best"
-                ),
-                "merge_output_format": "mp4",
-                "postprocessors": [{
-                    "key": "FFmpegCopyStream",
-                }],
-                "postprocessor_args": {
-                    "copystream": [
-                        "-c:v", "libx264",
-                        "-preset", "fast",          # Faster encoding (was medium)
-                        "-crf", "23",
-                        "-threads", "0",             # Use all available CPU cores
-                        "-c:a", "aac",
-                        "-b:a", "192k",
-                        "-movflags", "+faststart",
-                        "-pix_fmt", "yuv420p",
-                    ],
-                },
-            })
-        elif output_format == OutputFormat.VIDEO_WEBM:
-            opts.update({
-                "format": (
-                    "bestvideo[ext=webm]+bestaudio[ext=webm]/"
-                    "bestvideo+bestaudio/best"
-                ),
-                "merge_output_format": "webm",
-                "postprocessors": [{
-                    "key": "FFmpegCopyStream",
-                }],
-                "postprocessor_args": {
-                    "copystream": [
-                        "-c:v", "libvpx-vp9",
-                        "-crf", "30",
-                        "-b:v", "0",
-                        "-threads", "0",
-                        "-c:a", "libopus",
-                        "-b:a", "128k",
-                    ],
-                },
-            })
-        elif output_format == OutputFormat.AUDIO_MP3:
+        if quality == VideoQuality.MP3:
             opts.update({
                 "format": "bestaudio/best",
                 "postprocessors": [{
@@ -258,41 +211,25 @@ class DownloadService:
                     "preferredquality": "320",
                 }],
             })
-        elif output_format == OutputFormat.AUDIO_M4A:
+        else:
+            # Video quality: extract resolution number from enum value
+            height = int(quality.value.replace("p", ""))
             opts.update({
-                "format": "bestaudio[ext=m4a]/bestaudio/best",
+                "format": (
+                    f"bestvideo[height<={height}][vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
+                    f"bestvideo[height<={height}]+bestaudio/"
+                    f"best[height<={height}]"
+                ),
+                "merge_output_format": "mp4",
                 "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "m4a",
-                    "preferredquality": "320",
+                    "key": "FFmpegCopyStream",
                 }],
-            })
-        elif output_format == OutputFormat.AUDIO_WAV:
-            opts.update({
-                "format": "bestaudio/best",
-                "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "wav",
-                    "preferredquality": "0",
-                }],
-            })
-        elif output_format == OutputFormat.AUDIO_FLAC:
-            opts.update({
-                "format": "bestaudio/best",
-                "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "flac",
-                    "preferredquality": "0",
-                }],
-            })
-        elif output_format == OutputFormat.AUDIO_OGG:
-            opts.update({
-                "format": "bestaudio/best",
-                "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "vorbis",
-                    "preferredquality": "320",
-                }],
+                "postprocessor_args": {
+                    "copystream": [
+                        "-c", "copy",
+                        "-movflags", "+faststart",
+                    ],
+                },
             })
 
         return opts
@@ -301,11 +238,11 @@ class DownloadService:
         self,
         url: str,
         job_id: str,
-        output_format: OutputFormat,
+        quality: VideoQuality,
         progress: DownloadProgress,
     ) -> dict:
         """Run the actual download (blocking, runs in thread pool)"""
-        opts = self.get_yt_dlp_options(job_id, output_format, progress)
+        opts = self.get_yt_dlp_options(job_id, quality, progress)
 
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
@@ -366,7 +303,7 @@ class DownloadService:
     async def start_download(
         self,
         url: str,
-        output_format: OutputFormat,
+        quality: VideoQuality,
         progress_callback: Optional[Callable[[JobProgressUpdate], Any]] = None,
     ) -> tuple[str, asyncio.Task]:
         """Start a download job asynchronously. Returns job_id and task."""
@@ -399,7 +336,7 @@ class DownloadService:
                     self._run_download,
                     url,
                     job_id,
-                    output_format,
+                    quality,
                     progress,
                 )
 
