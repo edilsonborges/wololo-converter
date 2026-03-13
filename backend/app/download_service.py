@@ -453,6 +453,48 @@ class DownloadService:
 download_service = DownloadService()
 
 
+def extract_video_preview(url: str) -> dict:
+    """Extract video metadata without downloading. Returns preview data."""
+    ALLOWED_QUALITIES = [360, 480, 720, 1080]
+
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "socket_timeout": 15,
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except yt_dlp.utils.DownloadError as e:
+        error_msg = str(e)
+        if "Private video" in error_msg:
+            raise ValueError("This video is private and cannot be accessed")
+        elif "Video unavailable" in error_msg:
+            raise ValueError("This video is unavailable")
+        raise ValueError(f"Could not fetch video info: {error_msg}")
+
+    if not info:
+        raise ValueError("Could not fetch video info")
+
+    # Parse available resolutions from formats
+    available = set()
+    for fmt in info.get("formats", []):
+        height = fmt.get("height")
+        if height and isinstance(height, int):
+            for q in ALLOWED_QUALITIES:
+                if height >= q:
+                    available.add(q)
+
+    return {
+        "title": info.get("title", "Unknown"),
+        "thumbnail_url": info.get("thumbnail"),
+        "duration": info.get("duration"),
+        "available_qualities": sorted(available),
+    }
+
+
 def get_yt_dlp_version() -> str:
     """Get yt-dlp version string"""
     try:

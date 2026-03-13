@@ -24,8 +24,10 @@ from .schemas import (
     HealthResponse,
     ErrorResponse,
     JobProgressUpdate,
+    PreviewRequest,
+    PreviewResponse,
 )
-from .download_service import download_service, get_yt_dlp_version
+from .download_service import download_service, get_yt_dlp_version, extract_video_preview, executor
 from .utils import validate_url, get_directory_size, format_file_size
 
 
@@ -64,6 +66,23 @@ async def validate_url_endpoint(request: DownloadRequest):
         platform=platform,
         error=error,
     )
+
+
+@router.post("/preview", response_model=PreviewResponse)
+async def preview_video(request: Request, preview_request: PreviewRequest):
+    """Get video metadata without downloading"""
+    is_valid, platform, error = validate_url(preview_request.url)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error)
+
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(executor, extract_video_preview, preview_request.url)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch video info: {str(e)}")
 
 
 @router.post(

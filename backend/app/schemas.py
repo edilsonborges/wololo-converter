@@ -7,6 +7,34 @@ from urllib.parse import urlparse
 from .models import JobStatus, OutputFormat
 
 
+class PreviewRequest(BaseModel):
+    """Request schema for video preview/metadata"""
+    url: str = Field(..., min_length=10, max_length=2048, description="URL to preview")
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        """Validate URL format"""
+        v = v.strip()
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("URL must start with http:// or https://")
+        try:
+            parsed = urlparse(v)
+            if not parsed.netloc:
+                raise ValueError("Invalid URL format")
+        except Exception:
+            raise ValueError("Invalid URL format")
+        return v
+
+
+class PreviewResponse(BaseModel):
+    """Response schema for video preview/metadata"""
+    title: str
+    thumbnail_url: Optional[str] = None
+    duration: Optional[int] = None
+    available_qualities: list[int] = Field(default_factory=list)
+
+
 class DownloadRequest(BaseModel):
     """Request schema for starting a download"""
     url: str = Field(..., min_length=10, max_length=2048, description="URL to download")
