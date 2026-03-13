@@ -4,6 +4,7 @@ import type {
   URLValidationResponse,
   HealthResponse,
   JobProgressUpdate,
+  PreviewResponse,
 } from './types';
 
 const API_BASE = '/api';
@@ -48,6 +49,18 @@ export const api = {
       body: JSON.stringify({ url }),
     });
     return handleResponse<URLValidationResponse>(response);
+  },
+
+  /**
+   * Fetch video preview/metadata
+   */
+  async fetchPreview(url: string): Promise<PreviewResponse> {
+    const response = await fetch(`${API_BASE}/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    return handleResponse<PreviewResponse>(response);
   },
 
   /**

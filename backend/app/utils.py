@@ -18,9 +18,10 @@ PLATFORM_PATTERNS = {
         r"(?:https?://)?youtu\.be/[\w-]+",
         r"(?:https?://)?(?:www\.)?youtube\.com/embed/[\w-]+",
     ],
-    "instagram": [
-        r"(?:https?://)?(?:www\.)?instagram\.com/(?:p|reel|tv)/[\w-]+",
-    ],
+    # Instagram temporarily disabled - yt-dlp blocked by Instagram API
+    # "instagram": [
+    #     r"(?:https?://)?(?:www\.)?instagram\.com/(?:p|reel|tv)/[\w-]+",
+    # ],
     "facebook": [
         r"(?:https?://)?(?:www\.)?facebook\.com/.+/videos/\d+",
         r"(?:https?://)?(?:www\.)?facebook\.com/watch/?\?v=\d+",
@@ -80,7 +81,7 @@ def validate_url(url: str) -> Tuple[bool, Optional[str], Optional[str]]:
 
     # Check domain allowlist (SSRF protection)
     if not is_allowed_domain(url):
-        return False, None, "Domain not supported. Supported platforms: YouTube, Instagram, Facebook, Twitter/X"
+        return False, None, "Domain not supported. Supported platforms: YouTube, Twitter/X"
 
     # Detect platform
     platform = detect_platform(url)

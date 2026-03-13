@@ -15,7 +15,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from .config import settings
 from .database import get_session, get_db_context
-from .models import DownloadJob, JobStatus, OutputFormat
+from .models import DownloadJob, JobStatus, OutputFormat, VideoQuality
 from .schemas import (
     DownloadRequest,
     DownloadStartResponse,
@@ -24,8 +24,10 @@ from .schemas import (
     HealthResponse,
     ErrorResponse,
     JobProgressUpdate,
+    PreviewRequest,
+    PreviewResponse,
 )
-from .download_service import download_service, get_yt_dlp_version
+from .download_service import download_service, get_yt_dlp_version, extract_video_preview, executor
 from .utils import validate_url, get_directory_size, format_file_size
 
 
@@ -66,6 +68,23 @@ async def validate_url_endpoint(request: DownloadRequest):
     )
 
 
+@router.post("/preview", response_model=PreviewResponse)
+async def preview_video(request: Request, preview_request: PreviewRequest):
+    """Get video metadata without downloading"""
+    is_valid, platform, error = validate_url(preview_request.url)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error)
+
+    try:
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(executor, extract_video_preview, preview_request.url)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch video info: {str(e)}")
+
+
 @router.post(
     "/download",
     response_model=DownloadStartResponse,
@@ -99,22 +118,41 @@ async def start_download(
                 except asyncio.QueueFull:
                     pass
 
+        # Resolve quality: use quality field, fallback to output_format for backward compat
+        quality = download_request.quality
+        if download_request.output_format is not None and quality == VideoQuality.Q_480P:
+            # User sent deprecated output_format, map it
+            if download_request.output_format in (
+                OutputFormat.AUDIO_MP3, OutputFormat.AUDIO_M4A,
+                OutputFormat.AUDIO_WAV, OutputFormat.AUDIO_FLAC,
+                OutputFormat.AUDIO_OGG,
+            ):
+                quality = VideoQuality.MP3
+            # else keep default video quality
+
         # Start download
         job_id, task, detected_platform = await download_service.start_download(
             url=download_request.url,
-            output_format=download_request.output_format,
+            quality=quality,
             progress_callback=progress_callback,
         )
 
         # Store task
         download_tasks[job_id] = task
 
+        # Map quality to output_format for DB storage
+        db_output_format = (
+            OutputFormat.AUDIO_MP3.value if quality == VideoQuality.MP3
+            else OutputFormat.VIDEO.value
+        )
+
         # Create job in database
         job = DownloadJob(
             id=job_id,
             url=download_request.url,
             platform=detected_platform,
-            output_format=download_request.output_format.value,
+            output_format=db_output_format,
+            quality=quality.value,
             status=JobStatus.QUEUED.value,
             created_at=datetime.utcnow(),
         )

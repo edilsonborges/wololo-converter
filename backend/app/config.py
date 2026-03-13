@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     download_timeout_seconds: int = 3600  # 1 hour
     max_file_size_mb: int = 10000  # 10GB for 4K videos
 
+    # Browser cookies for platforms that require auth (e.g. Instagram)
+    # Options: "chrome", "firefox", "safari", "edge", "brave", "opera", "chromium"
+    cookies_from_browser: str = "chrome"
+
     # Rate limiting
     rate_limit_downloads: str = "10/minute"
 

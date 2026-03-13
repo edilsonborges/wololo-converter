@@ -1,5 +1,7 @@
 """Download service using yt-dlp with progress tracking"""
 import asyncio
+import time
+import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -8,9 +10,9 @@ import yt_dlp
 from concurrent.futures import ThreadPoolExecutor
 
 from .config import settings
-from .models import JobStatus, OutputFormat, DownloadJob
+from .models import JobStatus, OutputFormat, VideoQuality, DownloadJob
 from .schemas import JobProgressUpdate
-from .utils import get_safe_filepath, sanitize_filename, validate_url
+from .utils import get_safe_filepath, sanitize_filename, validate_url, detect_platform
 
 
 # Thread pool for running yt-dlp (it's not async-native)
@@ -19,6 +21,11 @@ executor = ThreadPoolExecutor(max_workers=settings.max_concurrent_downloads)
 
 class DownloadProgress:
     """Track download progress for a job"""
+
+    # Download phase: 0-70%, Conversion phase: 70-95%, Finalization: 95-100%
+    DOWNLOAD_MAX = 70.0
+    CONVERSION_MIN = 70.0
+    CONVERSION_MAX = 95.0
 
     def __init__(self, job_id: str, callback: Optional[Callable[[JobProgressUpdate], Any]] = None):
         self.job_id = job_id
@@ -32,6 +39,10 @@ class DownloadProgress:
         self.filename: Optional[str] = None
         self.error_message: Optional[str] = None
         self._last_progress = -1  # Avoid spamming updates
+        # Interpolation state for conversion phase
+        self._last_real_update: float = 0.0
+        self._interpolation_timer: Optional[threading.Timer] = None
+        self._in_conversion = False
 
     def _notify(self, download_ready: bool = False):
         """Send progress update via callback"""
@@ -52,26 +63,61 @@ class DownloadProgress:
             except Exception:
                 pass
 
+    def _start_interpolation(self):
+        """Start background interpolation timer for conversion phase"""
+        self._in_conversion = True
+        self._last_real_update = time.monotonic()
+        self._schedule_interpolation()
+
+    def _schedule_interpolation(self):
+        """Schedule next interpolation tick"""
+        if not self._in_conversion:
+            return
+        self._interpolation_timer = threading.Timer(2.0, self._interpolation_tick)
+        self._interpolation_timer.daemon = True
+        self._interpolation_timer.start()
+
+    def _interpolation_tick(self):
+        """Increment progress if stuck during conversion phase"""
+        if not self._in_conversion:
+            return
+        elapsed = time.monotonic() - self._last_real_update
+        if elapsed >= 5.0 and self.progress < self.CONVERSION_MAX:
+            self.progress = min(self.progress + 1.0, self.CONVERSION_MAX)
+            self._last_progress = int(self.progress)
+            self._notify()
+        self._schedule_interpolation()
+
+    def _stop_interpolation(self):
+        """Stop the interpolation timer"""
+        self._in_conversion = False
+        if self._interpolation_timer:
+            self._interpolation_timer.cancel()
+            self._interpolation_timer = None
+
     def progress_hook(self, d: dict):
-        """yt-dlp progress hook"""
+        """yt-dlp progress hook — download phase maps to 0-70%"""
         status = d.get("status", "")
 
         if status == "downloading":
             self.status = JobStatus.DOWNLOADING
             self.current_stage = "Downloading..."
 
-            # Extract progress
+            # Extract raw progress (0-100) and scale to 0-70%
+            raw_progress = 0.0
             total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
             downloaded = d.get("downloaded_bytes", 0)
 
             if total > 0:
-                self.progress = (downloaded / total) * 100
+                raw_progress = (downloaded / total) * 100
             else:
                 # Fallback to fragment progress
                 fragment = d.get("fragment_index", 0)
                 total_frags = d.get("fragment_count", 0)
                 if total_frags > 0:
-                    self.progress = (fragment / total_frags) * 100
+                    raw_progress = (fragment / total_frags) * 100
+
+            self.progress = raw_progress * self.DOWNLOAD_MAX / 100
 
             # Extract speed
             speed = d.get("speed")
@@ -104,7 +150,7 @@ class DownloadProgress:
 
         elif status == "finished":
             self.current_stage = "Download complete, preparing conversion..."
-            self.progress = 88
+            self.progress = self.DOWNLOAD_MAX  # 70%
             self._notify()
 
         elif status == "error":
@@ -113,39 +159,49 @@ class DownloadProgress:
             self._notify()
 
     def postprocessor_hook(self, d: dict):
-        """yt-dlp postprocessor hook"""
+        """yt-dlp postprocessor hook — conversion phase maps to 70-95%"""
         status = d.get("status", "")
+        conv_range = self.CONVERSION_MAX - self.CONVERSION_MIN  # 25%
 
         if status == "started":
             pp_name = d.get("postprocessor", "")
             if "VideoConvertor" in pp_name or "CopyStream" in pp_name:
                 self.status = JobStatus.CONVERTING
                 self.current_stage = "Converting video..."
-                self.progress = 90
+                self.progress = self.CONVERSION_MIN
                 self.speed = None
                 self.eta = None
+                self._start_interpolation()
             elif "ExtractAudio" in pp_name:
                 self.status = JobStatus.CONVERTING
                 self.current_stage = "Extracting audio..."
-                self.progress = 90
+                self.progress = self.CONVERSION_MIN
                 self.speed = None
                 self.eta = None
+                self._start_interpolation()
             elif "FFmpeg" in pp_name or "Audio" in pp_name:
                 self.status = JobStatus.CONVERTING
                 self.current_stage = "Converting format..."
-                self.progress = 90
+                self.progress = self.CONVERSION_MIN
+                self._start_interpolation()
             else:
                 self.current_stage = f"Processing ({pp_name})..."
             self._notify()
 
         elif status == "processing":
-            # FFmpeg progress update during conversion
-            self.progress = min(95, 90 + (d.get("progress", 0) or 0) * 5 / 100)
+            # FFmpeg progress update during conversion: scale to 70-95%
+            ffmpeg_progress = d.get("progress", 0) or 0
+            self.progress = min(
+                self.CONVERSION_MAX,
+                self.CONVERSION_MIN + ffmpeg_progress * conv_range / 100,
+            )
+            self._last_real_update = time.monotonic()
             self._notify()
 
         elif status == "finished":
+            self._stop_interpolation()
             self.current_stage = "Finalizing..."
-            self.progress = 98
+            self.progress = self.CONVERSION_MAX  # 95%
             self._notify()
 
 
@@ -171,10 +227,11 @@ class DownloadService:
     def get_yt_dlp_options(
         self,
         job_id: str,
-        output_format: OutputFormat,
+        quality: VideoQuality,
         progress: DownloadProgress,
+        url: str = "",
     ) -> dict:
-        """Get yt-dlp options based on output format"""
+        """Get yt-dlp options based on quality selection"""
         # Base output path
         output_dir = settings.temp_dir / job_id
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -202,54 +259,12 @@ class DownloadService:
             "prefer_insecure": False,
         }
 
-        if output_format == OutputFormat.VIDEO:
-            # Best H.264 video + AAC audio for maximum compatibility (especially QuickTime)
-            opts.update({
-                "format": (
-                    "bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
-                    "bestvideo[vcodec^=avc1]+bestaudio/"
-                    "bestvideo[ext=mp4][vcodec!^=vp9][vcodec!^=vp09][vcodec!^=av01]+bestaudio/"
-                    "bestvideo+bestaudio/best"
-                ),
-                "merge_output_format": "mp4",
-                "postprocessors": [{
-                    "key": "FFmpegCopyStream",
-                }],
-                "postprocessor_args": {
-                    "copystream": [
-                        "-c:v", "libx264",
-                        "-preset", "fast",          # Faster encoding (was medium)
-                        "-crf", "23",
-                        "-threads", "0",             # Use all available CPU cores
-                        "-c:a", "aac",
-                        "-b:a", "192k",
-                        "-movflags", "+faststart",
-                        "-pix_fmt", "yuv420p",
-                    ],
-                },
-            })
-        elif output_format == OutputFormat.VIDEO_WEBM:
-            opts.update({
-                "format": (
-                    "bestvideo[ext=webm]+bestaudio[ext=webm]/"
-                    "bestvideo+bestaudio/best"
-                ),
-                "merge_output_format": "webm",
-                "postprocessors": [{
-                    "key": "FFmpegCopyStream",
-                }],
-                "postprocessor_args": {
-                    "copystream": [
-                        "-c:v", "libvpx-vp9",
-                        "-crf", "30",
-                        "-b:v", "0",
-                        "-threads", "0",
-                        "-c:a", "libopus",
-                        "-b:a", "128k",
-                    ],
-                },
-            })
-        elif output_format == OutputFormat.AUDIO_MP3:
+        # Use browser cookies for platforms that require auth (e.g. Instagram)
+        platform = detect_platform(url) if url else None
+        if platform in ("instagram",) and settings.cookies_from_browser:
+            opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
+
+        if quality == VideoQuality.MP3:
             opts.update({
                 "format": "bestaudio/best",
                 "postprocessors": [{
@@ -257,42 +272,34 @@ class DownloadService:
                     "preferredcodec": "mp3",
                     "preferredquality": "320",
                 }],
+                # -threads 0 for cases that need re-encoding (non-mp3 source)
+                "postprocessor_args": {
+                    "extractaudio": ["-threads", "0"],
+                },
             })
-        elif output_format == OutputFormat.AUDIO_M4A:
+        else:
+            # Video quality: extract resolution number from enum value
+            height = int(quality.value.replace("p", ""))
             opts.update({
-                "format": "bestaudio[ext=m4a]/bestaudio/best",
+                "format": (
+                    f"bestvideo[height<={height}][vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
+                    f"bestvideo[height<={height}]+bestaudio/"
+                    f"best[height<={height}]"
+                ),
+                "merge_output_format": "mp4",
                 "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "m4a",
-                    "preferredquality": "320",
+                    "key": "FFmpegCopyStream",
                 }],
-            })
-        elif output_format == OutputFormat.AUDIO_WAV:
-            opts.update({
-                "format": "bestaudio/best",
-                "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "wav",
-                    "preferredquality": "0",
-                }],
-            })
-        elif output_format == OutputFormat.AUDIO_FLAC:
-            opts.update({
-                "format": "bestaudio/best",
-                "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "flac",
-                    "preferredquality": "0",
-                }],
-            })
-        elif output_format == OutputFormat.AUDIO_OGG:
-            opts.update({
-                "format": "bestaudio/best",
-                "postprocessors": [{
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": "vorbis",
-                    "preferredquality": "320",
-                }],
+                # -c copy avoids re-encoding when source is avc1+mp4a;
+                # -threads 0 for fallback re-encoding cases;
+                # +faststart moves moov atom for streaming
+                "postprocessor_args": {
+                    "copystream": [
+                        "-c", "copy",
+                        "-movflags", "+faststart",
+                        "-threads", "0",
+                    ],
+                },
             })
 
         return opts
@@ -301,11 +308,11 @@ class DownloadService:
         self,
         url: str,
         job_id: str,
-        output_format: OutputFormat,
+        quality: VideoQuality,
         progress: DownloadProgress,
     ) -> dict:
         """Run the actual download (blocking, runs in thread pool)"""
-        opts = self.get_yt_dlp_options(job_id, output_format, progress)
+        opts = self.get_yt_dlp_options(job_id, quality, progress, url)
 
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
@@ -366,7 +373,7 @@ class DownloadService:
     async def start_download(
         self,
         url: str,
-        output_format: OutputFormat,
+        quality: VideoQuality,
         progress_callback: Optional[Callable[[JobProgressUpdate], Any]] = None,
     ) -> tuple[str, asyncio.Task]:
         """Start a download job asynchronously. Returns job_id and task."""
@@ -399,7 +406,7 @@ class DownloadService:
                     self._run_download,
                     url,
                     job_id,
-                    output_format,
+                    quality,
                     progress,
                 )
 
@@ -451,6 +458,57 @@ class DownloadService:
 
 # Singleton instance
 download_service = DownloadService()
+
+
+def extract_video_preview(url: str) -> dict:
+    """Extract video metadata without downloading. Returns preview data."""
+    ALLOWED_QUALITIES = [360, 480, 720, 1080]
+
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+        "socket_timeout": 15,
+    }
+
+    # Use browser cookies for platforms that require auth (e.g. Instagram)
+    platform = detect_platform(url)
+    if platform in ("instagram",) and settings.cookies_from_browser:
+        opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
+
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except yt_dlp.utils.DownloadError as e:
+        error_msg = str(e)
+        if "Private video" in error_msg:
+            raise ValueError("This video is private and cannot be accessed")
+        elif "Video unavailable" in error_msg:
+            raise ValueError("This video is unavailable")
+        raise ValueError(f"Could not fetch video info: {error_msg}")
+
+    if not info:
+        raise ValueError("Could not fetch video info")
+
+    # Parse available resolutions from formats
+    available = set()
+    for fmt in info.get("formats", []):
+        height = fmt.get("height")
+        if height and isinstance(height, int):
+            for q in ALLOWED_QUALITIES:
+                if height >= q:
+                    available.add(q)
+
+    duration = info.get("duration")
+    if duration is not None:
+        duration = int(duration)
+
+    return {
+        "title": info.get("title", "Unknown"),
+        "thumbnail_url": info.get("thumbnail"),
+        "duration": duration,
+        "available_qualities": sorted(available),
+    }
 
 
 def get_yt_dlp_version() -> str:

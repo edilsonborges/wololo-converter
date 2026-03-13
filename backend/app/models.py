@@ -31,6 +31,15 @@ class OutputFormat(str, Enum):
     AUDIO_OGG = "audio_ogg"
 
 
+class VideoQuality(str, Enum):
+    """Video quality / audio selection options"""
+    Q_360P = "360p"
+    Q_480P = "480p"
+    Q_720P = "720p"
+    Q_1080P = "1080p"
+    MP3 = "mp3"
+
+
 class DownloadJob(Base):
     """Model to track download jobs"""
     __tablename__ = "download_jobs"
@@ -39,6 +48,7 @@ class DownloadJob(Base):
     url = Column(String(2048), nullable=False)
     platform = Column(String(50), nullable=False)
     output_format = Column(String(20), nullable=False)
+    quality = Column(String(10), nullable=True)  # e.g., "360p", "480p", "720p", "1080p", "mp3"
     status = Column(String(20), nullable=False, default=JobStatus.QUEUED.value)
 
     # Progress tracking

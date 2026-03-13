@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, type FC, type DragEvent } from 'react';
 import type { QueueItem, QueueConfig, QueueProcessingMode, JobStatus } from '../types';
 import { PLATFORMS } from '../types';
 import { Icon, PlatformIcon } from './Icon';
+import { SmoothProgressBar } from './SmoothProgressBar';
 
 interface QueueManagerProps {
   items: QueueItem[];
@@ -155,6 +156,17 @@ export const QueueManager: FC<QueueManagerProps> = ({
               <span className={`text-xs px-2 py-0.5 rounded-full ${statusStyle.bg} ${statusStyle.text}`}>
                 {progress ? JOB_STATUS_MAP[progress.status] || statusStyle.label : statusStyle.label}
               </span>
+              {item.quality === 'mp3' ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 text-xs font-medium">
+                  <Icon name="music" size="xs" />
+                  MP3
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 text-xs font-medium">
+                  <Icon name="video" size="xs" />
+                  {item.quality}
+                </span>
+              )}
               {item.progress?.title && (
                 <span className="text-sm text-text-primary font-medium truncate">
                   {item.progress.title}
@@ -168,19 +180,12 @@ export const QueueManager: FC<QueueManagerProps> = ({
             {/* Progress bar for active items */}
             {showProgress && (
               <div className="mt-2">
-                <div className="flex justify-between text-xs text-text-muted mb-1">
-                  <span>{Math.round(progress.progress)}%</span>
-                  <div className="flex items-center gap-2">
-                    {progress.speed && <span>{progress.speed}</span>}
-                    {progress.eta && <span>ETA: {progress.eta}</span>}
-                  </div>
-                </div>
-                <div className="h-2 bg-border rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-accent transition-all duration-300"
-                    style={{ width: `${progress.progress}%` }}
-                  />
-                </div>
+                <SmoothProgressBar
+                  progress={progress.progress}
+                  isActive={true}
+                  speed={progress.speed}
+                  eta={progress.eta}
+                />
               </div>
             )}
 

@@ -4,15 +4,48 @@ from typing import Optional
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 from urllib.parse import urlparse
 
-from .models import JobStatus, OutputFormat
+from .models import JobStatus, OutputFormat, VideoQuality
+
+
+class PreviewRequest(BaseModel):
+    """Request schema for video preview/metadata"""
+    url: str = Field(..., min_length=10, max_length=2048, description="URL to preview")
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        """Validate URL format"""
+        v = v.strip()
+        if not v.startswith(("http://", "https://")):
+            raise ValueError("URL must start with http:// or https://")
+        try:
+            parsed = urlparse(v)
+            if not parsed.netloc:
+                raise ValueError("Invalid URL format")
+        except Exception:
+            raise ValueError("Invalid URL format")
+        return v
+
+
+class PreviewResponse(BaseModel):
+    """Response schema for video preview/metadata"""
+    title: str
+    thumbnail_url: Optional[str] = None
+    duration: Optional[int] = None
+    available_qualities: list[int] = Field(default_factory=list)
 
 
 class DownloadRequest(BaseModel):
     """Request schema for starting a download"""
     url: str = Field(..., min_length=10, max_length=2048, description="URL to download")
-    output_format: OutputFormat = Field(
-        default=OutputFormat.VIDEO,
-        description="Desired output format"
+    quality: VideoQuality = Field(
+        default=VideoQuality.Q_480P,
+        description="Desired video quality or mp3"
+    )
+    output_format: Optional[OutputFormat] = Field(
+        default=None,
+        description="Deprecated: use 'quality' instead",
+        deprecated=True,
     )
 
     @field_validator("url")
@@ -44,6 +77,7 @@ class JobResponse(BaseModel):
     url: str
     platform: str
     output_format: OutputFormat
+    quality: Optional[VideoQuality] = None
     status: JobStatus
     progress: float = 0.0
     speed: Optional[str] = None

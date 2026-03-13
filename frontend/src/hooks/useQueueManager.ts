@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { api, ApiError } from '../api';
-import type { QueueItem, QueueConfig, OutputFormat, JobProgressUpdate, QueueItemStatus } from '../types';
+import type { QueueItem, QueueConfig, VideoQuality, JobProgressUpdate, QueueItemStatus } from '../types';
 
 interface ParsedURL {
   url: string;
@@ -33,14 +33,14 @@ export function useQueueManager() {
   }, []);
 
   // Add URLs to queue
-  const addToQueue = useCallback((parsedUrls: ParsedURL[], format: OutputFormat) => {
+  const addToQueue = useCallback((parsedUrls: ParsedURL[], quality: VideoQuality) => {
     const validUrls = parsedUrls.filter((u) => u.isValid);
 
     const newItems: QueueItem[] = validUrls.map((parsed) => ({
       id: generateId(),
       url: parsed.url,
       platform: parsed.platform,
-      format,
+      quality,
       status: 'pending' as QueueItemStatus,
       addedAt: Date.now(),
     }));
@@ -136,7 +136,7 @@ export function useQueueManager() {
     try {
       const response = await api.startDownload({
         url: item.url,
-        output_format: item.format,
+        quality: item.quality,
       });
 
       updateItem(item.id, { jobId: response.job_id });

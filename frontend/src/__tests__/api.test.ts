@@ -61,12 +61,12 @@ describe('api', () => {
 
       const result = await api.startDownload({
         url: 'https://youtube.com/watch?v=test',
-        output_format: 'audio_mp3',
+        quality: 'mp3',
       })
       expect(result.job_id).toBe('test-123')
 
       const callBody = JSON.parse((fetch as any).mock.calls[0][1].body)
-      expect(callBody.output_format).toBe('audio_mp3')
+      expect(callBody.quality).toBe('mp3')
     })
   })
 
