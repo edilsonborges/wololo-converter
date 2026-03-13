@@ -1,12 +1,12 @@
 import { useState, useCallback } from 'react';
 import { MultiURLInput, QueueManager, FormatSelector, Icon, type ParsedURL } from './components';
 import { useQueueManager } from './hooks/useQueueManager';
-import type { OutputFormat } from './types';
+import type { VideoQuality } from './types';
 
 function App() {
   // Form state
   const [parsedUrls, setParsedUrls] = useState<ParsedURL[]>([]);
-  const [selectedFormat, setSelectedFormat] = useState<OutputFormat>('video');
+  const [selectedFormat, setSelectedFormat] = useState<VideoQuality>('480p');
   const [resetTrigger, setResetTrigger] = useState(0);
 
   // Queue manager hook
