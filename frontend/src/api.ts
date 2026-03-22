@@ -21,7 +21,7 @@ async function handleResponse<T>(response: Response): Promise<T> {
     let message = 'An error occurred';
     try {
       const data = await response.json();
-      message = data.detail || data.error || message;
+      message = (Array.isArray(data.detail) ? data.detail.map((d: { msg: string }) => d.msg).join(', ') : data.detail) || data.error || message;
     } catch {
       // Ignore JSON parse errors
     }

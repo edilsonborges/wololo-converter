@@ -23,7 +23,7 @@ const PLATFORM_PATTERNS: Record<string, RegExp[]> = {
     /(?:https?:\/\/)?youtu\.be\/[\w-]+/i,
   ],
   instagram: [
-    /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:p|reel|tv)\/[\w-]+/i,
+    /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:p|reels?|tv)\/[\w-]+/i,
   ],
   // Facebook temporarily hidden - not working
   // facebook: [

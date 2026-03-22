@@ -70,12 +70,11 @@ export const PLATFORMS: Record<string, PlatformInfo> = {
     icon: 'youtube',
     color: 'text-platform-youtube',
   },
-  // Instagram temporarily disabled - yt-dlp blocked by Instagram API
-  // instagram: {
-  //   name: 'Instagram',
-  //   icon: 'instagram',
-  //   color: 'text-platform-instagram',
-  // },
+  instagram: {
+    name: 'Instagram',
+    icon: 'instagram',
+    color: 'text-platform-instagram',
+  },
   // Facebook temporarily hidden - not working
   // facebook: {
   //   name: 'Facebook',

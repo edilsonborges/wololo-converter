@@ -29,6 +29,9 @@ class TestDetectPlatform:
     def test_instagram_post(self):
         assert detect_platform("https://instagram.com/p/ABC123/") == "instagram"
 
+    def test_instagram_reels(self):
+        assert detect_platform("https://www.instagram.com/reels/DWKQUcak0hC/") == "instagram"
+
     def test_twitter(self):
         assert detect_platform("https://twitter.com/user/status/123456789") == "twitter"
 

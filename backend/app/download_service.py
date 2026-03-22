@@ -259,10 +259,8 @@ class DownloadService:
             "prefer_insecure": False,
         }
 
-        # Use browser cookies for platforms that require auth (e.g. Instagram)
+        # Detect platform for format/codec decisions
         platform = detect_platform(url) if url else None
-        if platform in ("instagram",) and settings.cookies_from_browser:
-            opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
 
         if quality == VideoQuality.MP3:
             opts.update({
@@ -280,25 +278,36 @@ class DownloadService:
         else:
             # Video quality: extract resolution number from enum value
             height = int(quality.value.replace("p", ""))
+
+            # Instagram uses VP9 codec which QuickTime can't play;
+            # re-encode to H.264 for compatibility
+            if platform == "instagram":
+                pp_args = [
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                    "-c:a", "copy",
+                    "-movflags", "+faststart",
+                    "-threads", "0",
+                ]
+            else:
+                pp_args = [
+                    "-c", "copy",
+                    "-movflags", "+faststart",
+                    "-threads", "0",
+                ]
+
             opts.update({
                 "format": (
                     f"bestvideo[height<={height}][vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
                     f"bestvideo[height<={height}]+bestaudio/"
-                    f"best[height<={height}]"
+                    f"bestvideo[width<={height}]+bestaudio/"
+                    f"best[height<={height}]/best[width<={height}]/best"
                 ),
                 "merge_output_format": "mp4",
                 "postprocessors": [{
                     "key": "FFmpegCopyStream",
                 }],
-                # -c copy avoids re-encoding when source is avc1+mp4a;
-                # -threads 0 for fallback re-encoding cases;
-                # +faststart moves moov atom for streaming
                 "postprocessor_args": {
-                    "copystream": [
-                        "-c", "copy",
-                        "-movflags", "+faststart",
-                        "-threads", "0",
-                    ],
+                    "copystream": pp_args,
                 },
             })
 
@@ -468,13 +477,9 @@ def extract_video_preview(url: str) -> dict:
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
-        "socket_timeout": 15,
+        "socket_timeout": 10,
+        "no_check_formats": True,
     }
-
-    # Use browser cookies for platforms that require auth (e.g. Instagram)
-    platform = detect_platform(url)
-    if platform in ("instagram",) and settings.cookies_from_browser:
-        opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
 
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -491,12 +496,15 @@ def extract_video_preview(url: str) -> dict:
         raise ValueError("Could not fetch video info")
 
     # Parse available resolutions from formats
+    # Use min(width, height) for portrait videos (e.g. Instagram Reels)
     available = set()
     for fmt in info.get("formats", []):
         height = fmt.get("height")
+        width = fmt.get("width")
         if height and isinstance(height, int):
+            short_side = min(width, height) if width and isinstance(width, int) else height
             for q in ALLOWED_QUALITIES:
-                if height >= q:
+                if short_side >= q:
                     available.add(q)
 
     duration = info.get("duration")
