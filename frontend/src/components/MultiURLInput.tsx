@@ -34,6 +34,9 @@ const PLATFORM_PATTERNS: Record<string, RegExp[]> = {
   twitter: [
     /(?:https?:\/\/)?(?:www\.)?(?:twitter|x)\.com\/\w+\/status\/\d+/i,
   ],
+  threads: [
+    /(?:https?:\/\/)?(?:www\.)?threads\.(?:net|com)\/@[\w.]+\/post\/[\w]+/i,
+  ],
 };
 
 function detectPlatform(url: string): string | null {

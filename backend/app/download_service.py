@@ -13,6 +13,7 @@ from .config import settings
 from .models import JobStatus, OutputFormat, VideoQuality, DownloadJob
 from .schemas import JobProgressUpdate
 from .utils import get_safe_filepath, sanitize_filename, validate_url, detect_platform
+from .threads_extractor import extract_threads_info
 
 
 # Thread pool for running yt-dlp (it's not async-native)
@@ -281,7 +282,7 @@ class DownloadService:
 
             # Instagram uses VP9 codec which QuickTime can't play;
             # re-encode to H.264 for compatibility
-            if platform == "instagram":
+            if platform in ("instagram", "threads"):
                 pp_args = [
                     "-c:v", "libx264", "-preset", "fast", "-crf", "23",
                     "-c:a", "copy",
@@ -313,6 +314,73 @@ class DownloadService:
 
         return opts
 
+    def _run_threads_download(
+        self,
+        url: str,
+        job_id: str,
+        progress: DownloadProgress,
+    ) -> dict:
+        """Download a Threads video using the custom extractor."""
+        import httpx as _httpx
+
+        try:
+            progress.status = JobStatus.VALIDATING
+            progress.current_stage = "Extracting video info..."
+            progress._notify()
+
+            info = extract_threads_info(url)
+            progress.title = info["title"]
+
+            progress.status = JobStatus.DOWNLOADING
+            progress.current_stage = "Downloading..."
+            progress._notify()
+
+            # Stream the video to disk
+            output_dir = settings.temp_dir / job_id
+            output_dir.mkdir(parents=True, exist_ok=True)
+            safe_name = sanitize_filename(f"{info['title']}.mp4")
+            output_file = output_dir / safe_name
+
+            with _httpx.stream(
+                "GET",
+                info["video_url"],
+                headers={"User-Agent": "Mozilla/5.0"},
+                follow_redirects=True,
+                timeout=60,
+            ) as resp:
+                resp.raise_for_status()
+                total = int(resp.headers.get("content-length", 0))
+                downloaded = 0
+
+                with open(output_file, "wb") as f:
+                    for chunk in resp.iter_bytes(chunk_size=256 * 1024):
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total > 0:
+                            raw = (downloaded / total) * 100
+                            progress.progress = raw * progress.DOWNLOAD_MAX / 100
+                            if int(progress.progress) > progress._last_progress:
+                                progress._last_progress = int(progress.progress)
+                                speed_str = None
+                                progress.speed = speed_str
+                                progress._notify()
+
+            progress.progress = progress.DOWNLOAD_MAX
+            progress._notify()
+
+            return {
+                "success": True,
+                "title": info["title"],
+                "filename": output_file.name,
+                "filepath": str(output_file),
+                "file_size": output_file.stat().st_size,
+                "duration": info.get("duration"),
+                "thumbnail_url": info.get("thumbnail_url"),
+            }
+
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def _run_download(
         self,
         url: str,
@@ -321,6 +389,11 @@ class DownloadService:
         progress: DownloadProgress,
     ) -> dict:
         """Run the actual download (blocking, runs in thread pool)"""
+        # Threads: use custom extractor (yt-dlp doesn't support it)
+        platform = detect_platform(url) if url else None
+        if platform == "threads":
+            return self._run_threads_download(url, job_id, progress)
+
         opts = self.get_yt_dlp_options(job_id, quality, progress, url)
 
         try:

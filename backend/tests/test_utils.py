@@ -41,6 +41,12 @@ class TestDetectPlatform:
     def test_facebook_video(self):
         assert detect_platform("https://www.facebook.com/user/videos/123456") == "facebook"
 
+    def test_threads_post(self):
+        assert detect_platform("https://www.threads.net/@zheray_kjr/post/DWMrfYPEons") == "threads"
+
+    def test_threads_com(self):
+        assert detect_platform("https://www.threads.com/@zheray_kjr/post/DWMrfYPEons") == "threads"
+
     def test_unknown_url(self):
         assert detect_platform("https://example.com/video") is None
 
@@ -60,6 +66,12 @@ class TestIsAllowedDomain:
 
     def test_x_allowed(self):
         assert is_allowed_domain("https://x.com/user/status/123") is True
+
+    def test_threads_allowed(self):
+        assert is_allowed_domain("https://www.threads.net/@user/post/ABC123") is True
+
+    def test_threads_com_allowed(self):
+        assert is_allowed_domain("https://www.threads.com/@user/post/ABC123") is True
 
     def test_unknown_domain_rejected(self):
         assert is_allowed_domain("https://evil.com/video") is False

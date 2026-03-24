@@ -56,8 +56,8 @@ function App() {
     const url = validUrls[0].url;
     const platform = validUrls[0].platform;
 
-    // Skip preview for Instagram (not needed, slows down UX)
-    if (platform === 'instagram') {
+    // Skip preview for Instagram/Threads (not needed, slows down UX)
+    if (platform === 'instagram' || platform === 'threads') {
       setPreview(null);
       setPreviewLoading(false);
       setPreviewError(null);
@@ -138,7 +138,7 @@ function App() {
             />
           </div>
           <p className="mt-3 text-text-tertiary">
-            Download videos from YouTube, Instagram and Twitter/X
+            Download videos from YouTube, Instagram, Threads and Twitter/X
           </p>
         </div>
       </header>

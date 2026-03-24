@@ -56,6 +56,7 @@ export default {
           youtube: '#DC2626',
           instagram: '#E4405F',
           facebook: '#1877F2',
+          threads: '#000000',
           twitter: '#1DA1F2',
         },
         // Legacy wololo colors (for backward compatibility)

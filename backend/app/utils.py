@@ -29,6 +29,9 @@ PLATFORM_PATTERNS = {
     "twitter": [
         r"(?:https?://)?(?:www\.)?(?:twitter|x)\.com/\w+/status/\d+",
     ],
+    "threads": [
+        r"(?:https?://)?(?:www\.)?threads\.(?:net|com)/@[\w.]+/post/[\w]+",
+    ],
 }
 
 
@@ -80,7 +83,7 @@ def validate_url(url: str) -> Tuple[bool, Optional[str], Optional[str]]:
 
     # Check domain allowlist (SSRF protection)
     if not is_allowed_domain(url):
-        return False, None, "Domain not supported. Supported platforms: YouTube, Instagram, Twitter/X"
+        return False, None, "Domain not supported. Supported platforms: YouTube, Instagram, Threads, Twitter/X"
 
     # Detect platform
     platform = detect_platform(url)

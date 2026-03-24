@@ -5,6 +5,7 @@ import {
   Instagram,
   Facebook,
   Twitter,
+  AtSign,
   Video,
   Music,
   Music2,
@@ -33,6 +34,7 @@ export const iconMap = {
   instagram: Instagram,
   facebook: Facebook,
   twitter: Twitter,
+  atSign: AtSign,
   video: Video,
   music: Music,
   music2: Music2,
@@ -105,6 +107,7 @@ const platformIconMap: Record<string, IconName> = {
   youtube: 'youtube',
   instagram: 'instagram',
   // facebook: 'facebook', // Facebook temporarily hidden - not working
+  threads: 'atSign',
   twitter: 'twitter',
 };
 

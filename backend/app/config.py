@@ -44,6 +44,10 @@ class Settings(BaseSettings):
         "www.twitter.com",
         "x.com",
         "www.x.com",
+        "threads.net",
+        "www.threads.net",
+        "threads.com",
+        "www.threads.com",
     ]
 
     # Database
