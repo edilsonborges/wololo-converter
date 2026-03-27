@@ -47,6 +47,15 @@ class TestDetectPlatform:
     def test_threads_com(self):
         assert detect_platform("https://www.threads.com/@zheray_kjr/post/DWMrfYPEons") == "threads"
 
+    def test_tiktok_video(self):
+        assert detect_platform("https://www.tiktok.com/@tvxmfdr2763/video/7589582058448588062") == "tiktok"
+
+    def test_tiktok_short_url(self):
+        assert detect_platform("https://vm.tiktok.com/ZMkABC123/") == "tiktok"
+
+    def test_tiktok_t_url(self):
+        assert detect_platform("https://www.tiktok.com/t/ZTF123abc/") == "tiktok"
+
     def test_unknown_url(self):
         assert detect_platform("https://example.com/video") is None
 
@@ -72,6 +81,12 @@ class TestIsAllowedDomain:
 
     def test_threads_com_allowed(self):
         assert is_allowed_domain("https://www.threads.com/@user/post/ABC123") is True
+
+    def test_tiktok_allowed(self):
+        assert is_allowed_domain("https://www.tiktok.com/@user/video/123") is True
+
+    def test_tiktok_vm_allowed(self):
+        assert is_allowed_domain("https://vm.tiktok.com/ZMkABC/") is True
 
     def test_unknown_domain_rejected(self):
         assert is_allowed_domain("https://evil.com/video") is False

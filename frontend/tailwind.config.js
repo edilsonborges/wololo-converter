@@ -56,6 +56,7 @@ export default {
           youtube: '#DC2626',
           instagram: '#E4405F',
           facebook: '#1877F2',
+          tiktok: '#000000',
           threads: '#000000',
           twitter: '#1DA1F2',
         },

@@ -107,6 +107,7 @@ const platformIconMap: Record<string, IconName> = {
   youtube: 'youtube',
   instagram: 'instagram',
   // facebook: 'facebook', // Facebook temporarily hidden - not working
+  tiktok: 'music2',
   threads: 'atSign',
   twitter: 'twitter',
 };

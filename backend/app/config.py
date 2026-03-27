@@ -48,6 +48,9 @@ class Settings(BaseSettings):
         "www.threads.net",
         "threads.com",
         "www.threads.com",
+        "tiktok.com",
+        "www.tiktok.com",
+        "vm.tiktok.com",
     ]
 
     # Database

@@ -138,7 +138,7 @@ function App() {
             />
           </div>
           <p className="mt-3 text-text-tertiary">
-            Download videos from YouTube, Instagram, Threads and Twitter/X
+            Download videos from YouTube, Instagram, TikTok, Threads and Twitter/X
           </p>
         </div>
       </header>

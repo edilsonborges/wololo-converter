@@ -81,6 +81,11 @@ export const PLATFORMS: Record<string, PlatformInfo> = {
   //   icon: 'facebook',
   //   color: 'text-platform-facebook',
   // },
+  tiktok: {
+    name: 'TikTok',
+    icon: 'music2',
+    color: 'text-platform-tiktok',
+  },
   threads: {
     name: 'Threads',
     icon: 'atSign',

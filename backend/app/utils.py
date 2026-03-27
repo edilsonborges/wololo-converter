@@ -32,6 +32,11 @@ PLATFORM_PATTERNS = {
     "threads": [
         r"(?:https?://)?(?:www\.)?threads\.(?:net|com)/@[\w.]+/post/[\w]+",
     ],
+    "tiktok": [
+        r"(?:https?://)?(?:www\.)?tiktok\.com/@[\w.]+/video/\d+",
+        r"(?:https?://)?vm\.tiktok\.com/[\w]+",
+        r"(?:https?://)?(?:www\.)?tiktok\.com/t/[\w]+",
+    ],
 }
 
 
@@ -83,7 +88,7 @@ def validate_url(url: str) -> Tuple[bool, Optional[str], Optional[str]]:
 
     # Check domain allowlist (SSRF protection)
     if not is_allowed_domain(url):
-        return False, None, "Domain not supported. Supported platforms: YouTube, Instagram, Threads, Twitter/X"
+        return False, None, "Domain not supported. Supported platforms: YouTube, Instagram, TikTok, Threads, Twitter/X"
 
     # Detect platform
     platform = detect_platform(url)

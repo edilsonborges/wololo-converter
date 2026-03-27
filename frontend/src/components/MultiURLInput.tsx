@@ -31,6 +31,11 @@ const PLATFORM_PATTERNS: Record<string, RegExp[]> = {
   //   /(?:https?:\/\/)?(?:www\.)?facebook\.com\/watch\/?\?v=\d+/i,
   //   /(?:https?:\/\/)?fb\.watch\/[\w-]+/i,
   // ],
+  tiktok: [
+    /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@[\w.]+\/video\/\d+/i,
+    /(?:https?:\/\/)?vm\.tiktok\.com\/[\w]+/i,
+    /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/t\/[\w]+/i,
+  ],
   twitter: [
     /(?:https?:\/\/)?(?:www\.)?(?:twitter|x)\.com\/\w+\/status\/\d+/i,
   ],
