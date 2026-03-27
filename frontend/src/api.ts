@@ -95,6 +95,23 @@ export const api = {
   },
 
   /**
+   * Extract audio (MP3) from a completed video download
+   */
+  async extractAudio(jobId: string): Promise<{ filename: string; file_size: number }> {
+    const response = await fetch(`${API_BASE}/jobs/${jobId}/extract-audio`, {
+      method: 'POST',
+    });
+    return handleResponse(response);
+  },
+
+  /**
+   * Get audio download URL for a completed extraction
+   */
+  getAudioDownloadUrl(jobId: string): string {
+    return `${API_BASE}/jobs/${jobId}/download-audio`;
+  },
+
+  /**
    * Subscribe to job progress updates via SSE
    */
   subscribeToProgress(

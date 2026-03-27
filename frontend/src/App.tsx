@@ -29,6 +29,8 @@ function App() {
     retryItem,
     clearCompleted,
     downloadFile,
+    extractAudio,
+    extractingAudio,
   } = useQueueManager();
 
   const handleUrlsChange = useCallback((urls: ParsedURL[]) => {
@@ -196,6 +198,8 @@ function App() {
               onCancel={cancelItem}
               onRetry={retryItem}
               onDownload={downloadFile}
+              onExtractAudio={extractAudio}
+              extractingAudio={extractingAudio}
               onClearCompleted={clearCompleted}
             />
           )}

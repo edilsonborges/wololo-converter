@@ -129,6 +129,32 @@ export function useQueueManager() {
     document.body.removeChild(link);
   }, []);
 
+  // Extract audio from completed video and download it
+  const [extractingAudio, setExtractingAudio] = useState<Set<string>>(new Set());
+
+  const extractAudio = useCallback(async (jobId: string) => {
+    setExtractingAudio((prev) => new Set(prev).add(jobId));
+    try {
+      await api.extractAudio(jobId);
+      // Trigger audio download
+      const audioUrl = api.getAudioDownloadUrl(jobId);
+      const link = document.createElement('a');
+      link.href = audioUrl;
+      link.download = '';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Audio extraction failed:', err);
+    } finally {
+      setExtractingAudio((prev) => {
+        const next = new Set(prev);
+        next.delete(jobId);
+        return next;
+      });
+    }
+  }, []);
+
   // Start processing a single item
   const startItemDownload = useCallback(async (item: QueueItem) => {
     updateItem(item.id, { status: 'active' });
@@ -268,6 +294,8 @@ export function useQueueManager() {
     retryItem,
     clearCompleted,
     downloadFile,
+    extractAudio,
+    extractingAudio,
     startProcessing,
     stopProcessing,
   };

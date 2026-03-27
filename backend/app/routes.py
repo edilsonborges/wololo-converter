@@ -294,6 +294,82 @@ async def download_file(job_id: str, db: AsyncSession = Depends(get_session)):
     )
 
 
+@router.post("/jobs/{job_id}/extract-audio")
+async def extract_audio(job_id: str):
+    """Extract MP3 audio from a completed video download"""
+    job_dir = settings.temp_dir / job_id
+    if not job_dir.exists():
+        raise HTTPException(status_code=404, detail="Download files have expired")
+
+    # Find the video file
+    video_exts = ('.mp4', '.webm', '.mkv')
+    video_files = [
+        f for f in job_dir.glob("*")
+        if f.suffix.lower() in video_exts and not f.name.endswith(".part")
+    ]
+    if not video_files:
+        raise HTTPException(status_code=404, detail="No video file found")
+
+    video_file = max(video_files, key=lambda f: f.stat().st_mtime)
+    audio_file = video_file.with_suffix(".mp3")
+
+    # If already extracted, return immediately
+    if audio_file.exists():
+        return {
+            "filename": audio_file.name,
+            "file_size": audio_file.stat().st_size,
+        }
+
+    # Run ffmpeg in thread pool to avoid blocking the event loop
+    import subprocess
+
+    loop = asyncio.get_event_loop()
+
+    def _extract():
+        result = subprocess.run(
+            [
+                "ffmpeg", "-i", str(video_file),
+                "-vn", "-acodec", "libmp3lame", "-q:a", "0",
+                "-threads", "0",
+                "-y", str(audio_file),
+            ],
+            capture_output=True,
+            timeout=300,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.decode(errors="replace")[:500])
+
+    try:
+        await loop.run_in_executor(executor, _extract)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Audio extraction failed: {e}")
+
+    return {
+        "filename": audio_file.name,
+        "file_size": audio_file.stat().st_size,
+    }
+
+
+@router.get("/jobs/{job_id}/download-audio")
+async def download_audio_file(job_id: str):
+    """Download extracted audio file"""
+    job_dir = settings.temp_dir / job_id
+    if not job_dir.exists():
+        raise HTTPException(status_code=404, detail="Download files have expired")
+
+    audio_files = [f for f in job_dir.glob("*.mp3")]
+    if not audio_files:
+        raise HTTPException(status_code=404, detail="No audio file found. Extract audio first.")
+
+    audio_file = max(audio_files, key=lambda f: f.stat().st_mtime)
+
+    return FileResponse(
+        path=str(audio_file),
+        filename=audio_file.name,
+        media_type="audio/mpeg",
+    )
+
+
 @router.delete("/jobs/{job_id}")
 async def cancel_job(job_id: str, db: AsyncSession = Depends(get_session)):
     """Cancel a download job"""

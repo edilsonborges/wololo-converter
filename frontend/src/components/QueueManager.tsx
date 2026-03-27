@@ -13,6 +13,8 @@ interface QueueManagerProps {
   onCancel: (id: string) => void;
   onRetry: (id: string) => void;
   onDownload: (jobId: string) => void;
+  onExtractAudio: (jobId: string) => void;
+  extractingAudio: Set<string>;
   onClearCompleted: () => void;
 }
 
@@ -44,6 +46,8 @@ export const QueueManager: FC<QueueManagerProps> = ({
   onCancel,
   onRetry,
   onDownload,
+  onExtractAudio,
+  extractingAudio,
   onClearCompleted,
 }) => {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -207,6 +211,22 @@ export const QueueManager: FC<QueueManagerProps> = ({
                 title="Download file"
               >
                 <Icon name="download" size="sm" />
+              </button>
+            )}
+
+            {/* Extract audio button for completed video items (not MP3) */}
+            {item.status === 'completed' && item.jobId && item.quality !== 'mp3' && (
+              <button
+                onClick={() => onExtractAudio(item.jobId!)}
+                disabled={extractingAudio.has(item.jobId!)}
+                className="p-1.5 text-purple-500 hover:bg-purple-50 rounded transition-colors disabled:opacity-50"
+                title="Save as MP3"
+              >
+                <Icon
+                  name={extractingAudio.has(item.jobId!) ? 'loader2' : 'music'}
+                  size="sm"
+                  className={extractingAudio.has(item.jobId!) ? 'animate-spin' : ''}
+                />
               </button>
             )}
 
