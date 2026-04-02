@@ -260,6 +260,9 @@ class DownloadService:
             "prefer_insecure": False,
         }
 
+        if settings.cookies_from_browser:
+            opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
+
         # Detect platform for format/codec decisions
         platform = detect_platform(url) if url else None
 
@@ -443,6 +446,8 @@ class DownloadService:
                 error_msg = "This video is private and cannot be downloaded"
             elif "Video unavailable" in error_msg:
                 error_msg = "This video is unavailable"
+            elif "Sign in to confirm" in error_msg:
+                error_msg = "YouTube requires authentication. Make sure you're logged in to YouTube in your browser"
             elif "age-restricted" in error_msg.lower():
                 error_msg = "This video is age-restricted"
             elif "copyright" in error_msg.lower():
@@ -552,7 +557,12 @@ def extract_video_preview(url: str) -> dict:
         "noplaylist": True,
         "socket_timeout": 10,
         "no_check_formats": True,
+        "skip_download": True,
+        "ignore_no_formats_error": True,
     }
+
+    if settings.cookies_from_browser:
+        opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
 
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
