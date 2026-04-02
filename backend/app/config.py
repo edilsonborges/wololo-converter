@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # Browser cookies for platforms that require auth
     # Options: "chrome", "firefox", "safari", "edge", "brave", "opera", "chromium", "" to disable
     cookies_from_browser: str = ""
+    # Path to a Netscape-format cookies.txt file (for Docker/server deployments)
+    # Export from incognito session with a throwaway account to avoid bans
+    cookies_file: str = ""
 
     # Rate limiting
     rate_limit_downloads: str = "10/minute"

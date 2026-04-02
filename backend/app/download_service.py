@@ -20,6 +20,24 @@ from .threads_extractor import extract_threads_info
 executor = ThreadPoolExecutor(max_workers=settings.max_concurrent_downloads)
 
 
+def _has_valid_cookies_file() -> bool:
+    """Check if a real cookies file exists (not just the placeholder)."""
+    if not settings.cookies_file:
+        return False
+    p = Path(settings.cookies_file)
+    if not p.is_file():
+        return False
+    try:
+        text = p.read_text().strip()
+        # Placeholder or empty file — ignore
+        for line in text.splitlines():
+            if line and not line.startswith("#"):
+                return True
+        return False
+    except Exception:
+        return False
+
+
 class DownloadProgress:
     """Track download progress for a job"""
 
@@ -260,7 +278,9 @@ class DownloadService:
             "prefer_insecure": False,
         }
 
-        if settings.cookies_from_browser:
+        if _has_valid_cookies_file():
+            opts["cookiefile"] = settings.cookies_file
+        elif settings.cookies_from_browser:
             opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
 
         # Detect platform for format/codec decisions
@@ -269,7 +289,6 @@ class DownloadService:
         # YouTube: use tv_embedded client to avoid bot detection on server IPs
         if platform == "youtube":
             opts["extractor_args"] = {"youtube": {"player_client": ["tv_embedded"]}}
-
 
         if quality == VideoQuality.MP3:
             opts.update({
@@ -566,13 +585,15 @@ def extract_video_preview(url: str) -> dict:
         "ignore_no_formats_error": True,
     }
 
-    if settings.cookies_from_browser:
+    if settings.cookies_file:
+        opts["cookiefile"] = settings.cookies_file
+    elif settings.cookies_from_browser:
         opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
 
-    # YouTube: use mediaconnect client to avoid bot detection on server IPs
+    # YouTube: use tv_embedded client to avoid bot detection on server IPs
     platform = detect_platform(url) if url else None
     if platform == "youtube":
-        opts["extractor_args"] = {"youtube": {"player_client": ["mediaconnect"]}}
+        opts["extractor_args"] = {"youtube": {"player_client": ["tv_embedded"]}}
 
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:

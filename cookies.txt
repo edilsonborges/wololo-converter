@@ -1,0 +1,9 @@
+# Netscape HTTP Cookie File
+# To enable YouTube on server deployments:
+# 1. Create a throwaway Google account (do NOT use your personal account)
+# 2. Open incognito window, log into YouTube with the throwaway account
+# 3. Go to https://www.youtube.com/robots.txt in the same tab
+# 4. Export cookies using "Get cookies.txt LOCALLY" browser extension
+# 5. Replace this file with the exported one
+# 6. Close the incognito window (never reopen it)
+# 7. Rebuild: docker-compose up -d --build
