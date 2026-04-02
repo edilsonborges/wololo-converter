@@ -17,7 +17,7 @@ services:
     volumes:
       - backend_data:/app/data
       - temp_downloads:/tmp/wololo
-      - ./cookies.txt:/app/cookies.txt:ro
+      - ./cookies.txt:/app/cookies.txt
     ports:
       - "47652:47652"
     healthcheck:
