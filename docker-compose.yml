@@ -13,11 +13,9 @@ services:
       - DATABASE_URL=sqlite+aiosqlite:///./data/wololo.db
       - MAX_CONCURRENT_DOWNLOADS=3
       - RATE_LIMIT_DOWNLOADS=10/minute
-      - COOKIES_FILE=/app/cookies.txt
     volumes:
       - backend_data:/app/data
       - temp_downloads:/tmp/wololo
-      - ./cookies.txt:/app/cookies.txt:ro
     ports:
       - "47652:47652"
     healthcheck:

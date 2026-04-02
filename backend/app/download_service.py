@@ -260,13 +260,16 @@ class DownloadService:
             "prefer_insecure": False,
         }
 
-        if settings.cookies_file:
-            opts["cookiefile"] = settings.cookies_file
-        elif settings.cookies_from_browser:
+        if settings.cookies_from_browser:
             opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
 
         # Detect platform for format/codec decisions
         platform = detect_platform(url) if url else None
+
+        # YouTube: use tv_embedded client to avoid bot detection on server IPs
+        if platform == "youtube":
+            opts["extractor_args"] = {"youtube": {"player_client": ["tv_embedded"]}}
+
 
         if quality == VideoQuality.MP3:
             opts.update({
@@ -563,10 +566,13 @@ def extract_video_preview(url: str) -> dict:
         "ignore_no_formats_error": True,
     }
 
-    if settings.cookies_file:
-        opts["cookiefile"] = settings.cookies_file
-    elif settings.cookies_from_browser:
+    if settings.cookies_from_browser:
         opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
+
+    # YouTube: use mediaconnect client to avoid bot detection on server IPs
+    platform = detect_platform(url) if url else None
+    if platform == "youtube":
+        opts["extractor_args"] = {"youtube": {"player_client": ["mediaconnect"]}}
 
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
