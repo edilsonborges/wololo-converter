@@ -260,7 +260,9 @@ class DownloadService:
             "prefer_insecure": False,
         }
 
-        if settings.cookies_from_browser:
+        if settings.cookies_file:
+            opts["cookiefile"] = settings.cookies_file
+        elif settings.cookies_from_browser:
             opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
 
         # Detect platform for format/codec decisions
@@ -561,7 +563,9 @@ def extract_video_preview(url: str) -> dict:
         "ignore_no_formats_error": True,
     }
 
-    if settings.cookies_from_browser:
+    if settings.cookies_file:
+        opts["cookiefile"] = settings.cookies_file
+    elif settings.cookies_from_browser:
         opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
 
     try:

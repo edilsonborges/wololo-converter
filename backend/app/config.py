@@ -23,9 +23,11 @@ class Settings(BaseSettings):
     download_timeout_seconds: int = 3600  # 1 hour
     max_file_size_mb: int = 10000  # 10GB for 4K videos
 
-    # Browser cookies for platforms that require auth (e.g. Instagram)
+    # Browser cookies for platforms that require auth (e.g. YouTube)
     # Options: "chrome", "firefox", "safari", "edge", "brave", "opera", "chromium", "" to disable
     cookies_from_browser: str = ""
+    # Path to a Netscape-format cookies.txt file (for Docker/server deployments)
+    cookies_file: str = ""
 
     # Rate limiting
     rate_limit_downloads: str = "10/minute"
