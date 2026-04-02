@@ -49,3 +49,6 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Cookies (sensitive auth tokens)
+cookies.txt
