@@ -2,14 +2,15 @@
 import pytest
 from pydantic import ValidationError
 from app.schemas import DownloadRequest, JobProgressUpdate
-from app.models import JobStatus, OutputFormat
+from app.models import JobStatus, OutputFormat, VideoQuality
 
 
 class TestDownloadRequest:
     def test_valid_request(self):
         req = DownloadRequest(url="https://www.youtube.com/watch?v=test123")
         assert req.url == "https://www.youtube.com/watch?v=test123"
-        assert req.output_format == OutputFormat.VIDEO
+        assert req.quality == VideoQuality.Q_480P
+        assert req.output_format is None
 
     def test_valid_request_with_format(self):
         req = DownloadRequest(url="https://www.youtube.com/watch?v=test123", output_format="audio_mp3")

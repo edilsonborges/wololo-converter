@@ -38,6 +38,44 @@ def _has_valid_cookies_file() -> bool:
         return False
 
 
+# Browser-like User-Agent to avoid throttling on Instagram/Facebook
+_MODERN_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
+
+
+def _pick_instagram_codec_strategy(info: dict, height: int) -> list[str]:
+    """Return FFmpeg postprocessor args for Instagram/Threads based on codec.
+
+    If an H.264 format within the target height is available, yt-dlp will
+    pick it (because the format selector prefers avc1), so stream copy is
+    safe and near-instant. Otherwise we re-encode to libx264 with the
+    veryfast preset for QuickTime compatibility.
+    """
+    faststart = ["-movflags", "+faststart", "-threads", "0"]
+    reencode = [
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-c:a", "copy",
+        *faststart,
+    ]
+
+    formats = info.get("formats") or []
+    for fmt in formats:
+        vcodec = (fmt.get("vcodec") or "").lower()
+        h = fmt.get("height") or 0
+        if not vcodec or vcodec == "none":
+            continue
+        if not (vcodec.startswith("avc1") or vcodec.startswith("h264")):
+            continue
+        if not isinstance(h, int) or h <= 0 or h > height:
+            continue
+        return ["-c", "copy", *faststart]
+
+    return reencode
+
+
 class DownloadProgress:
     """Track download progress for a job"""
 
@@ -249,6 +287,7 @@ class DownloadService:
         quality: VideoQuality,
         progress: DownloadProgress,
         url: str = "",
+        info: Optional[dict] = None,
     ) -> dict:
         """Get yt-dlp options based on quality selection"""
         # Base output path
@@ -270,6 +309,9 @@ class DownloadService:
             "socket_timeout": 30,
             "retries": 3,
             "fragment_retries": 3,
+            # Speed: parallel fragment downloads + larger HTTP chunks
+            "concurrent_fragment_downloads": 4,
+            "http_chunk_size": 10 * 1024 * 1024,
             # Security: limit file size
             "max_filesize": settings.max_file_size_mb * 1024 * 1024,
             # No external downloaders for safety
@@ -285,6 +327,17 @@ class DownloadService:
 
         # Detect platform for format/codec decisions
         platform = detect_platform(url) if url else None
+
+        # Browser-like headers reduce throttling on Instagram/Facebook
+        http_headers = {
+            "User-Agent": _MODERN_UA,
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        if platform == "instagram":
+            http_headers["Referer"] = "https://www.instagram.com/"
+        elif platform == "facebook":
+            http_headers["Referer"] = "https://www.facebook.com/"
+        opts["http_headers"] = http_headers
 
         # YouTube: use tv_embedded client to avoid bot detection on server IPs
         if platform == "youtube":
@@ -307,15 +360,20 @@ class DownloadService:
             # Video quality: extract resolution number from enum value
             height = int(quality.value.replace("p", ""))
 
-            # Instagram uses VP9 codec which QuickTime can't play;
-            # re-encode to H.264 for compatibility
+            # Instagram/Threads may serve VP9 (incompatible with QuickTime).
+            # If info is available, inspect formats: when H.264 is present
+            # within the target height we can stream copy (near-instant);
+            # otherwise re-encode with libx264 veryfast.
             if platform in ("instagram", "threads"):
-                pp_args = [
-                    "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-                    "-c:a", "copy",
-                    "-movflags", "+faststart",
-                    "-threads", "0",
-                ]
+                if info is not None:
+                    pp_args = _pick_instagram_codec_strategy(info, height)
+                else:
+                    pp_args = [
+                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+                        "-c:a", "copy",
+                        "-movflags", "+faststart",
+                        "-threads", "0",
+                    ]
             else:
                 pp_args = [
                     "-c", "copy",
@@ -424,16 +482,22 @@ class DownloadService:
         opts = self.get_yt_dlp_options(job_id, quality, progress, url)
 
         try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                # First, extract info
-                progress.status = JobStatus.VALIDATING
-                progress.current_stage = "Extracting video info..."
-                progress._notify()
+            progress.status = JobStatus.VALIDATING
+            progress.current_stage = "Extracting video info..."
+            progress._notify()
 
-                info = ydl.extract_info(url, download=False)
+            with yt_dlp.YoutubeDL(opts) as probe_ydl:
+                info = probe_ydl.extract_info(url, download=False)
                 progress.title = info.get("title", "Unknown")
 
-                # Start download
+            # Instagram/Threads video: rebuild opts using codec info so we
+            # can stream-copy H.264 instead of always re-encoding.
+            if platform == "instagram" and quality != VideoQuality.MP3:
+                opts = self.get_yt_dlp_options(
+                    job_id, quality, progress, url, info=info,
+                )
+
+            with yt_dlp.YoutubeDL(opts) as ydl:
                 progress.status = JobStatus.DOWNLOADING
                 progress.current_stage = "Starting download..."
                 progress._notify()
