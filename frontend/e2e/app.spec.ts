@@ -25,29 +25,33 @@ test.describe('Wololo Converter App', () => {
     await expect(textarea).toHaveAttribute('placeholder', /Paste one or more URLs/)
   })
 
-  test('should display all format options', async ({ page }) => {
-    await expect(page.getByText('MP4 Video')).toBeVisible()
-    await expect(page.getByText('WebM Video')).toBeVisible()
-    await expect(page.getByText('MP3')).toBeVisible()
-    await expect(page.getByText('M4A')).toBeVisible()
-    await expect(page.getByText('WAV')).toBeVisible()
-    await expect(page.getByText('FLAC')).toBeVisible()
-    await expect(page.getByText('OGG')).toBeVisible()
+  test('should display all quality options after entering a valid URL', async ({ page }) => {
+    await page.locator('textarea').fill('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+
+    await expect(page.locator('button', { hasText: '360p' })).toBeVisible()
+    await expect(page.locator('button', { hasText: '480p' })).toBeVisible()
+    await expect(page.locator('button', { hasText: '720p' })).toBeVisible()
+    await expect(page.locator('button', { hasText: '1080p' })).toBeVisible()
+    await expect(page.locator('button', { hasText: 'MP3' })).toBeVisible()
   })
 
-  test('should have MP4 Video selected by default', async ({ page }) => {
-    const mp4Button = page.locator('button', { hasText: 'MP4 Video' })
-    await expect(mp4Button).toHaveClass(/border-accent/)
+  test('should have 480p selected by default', async ({ page }) => {
+    await page.locator('textarea').fill('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+
+    const defaultButton = page.locator('button', { hasText: '480p' })
+    await expect(defaultButton).toHaveClass(/border-accent/)
   })
 
-  test('should allow switching format', async ({ page }) => {
+  test('should allow switching quality', async ({ page }) => {
+    await page.locator('textarea').fill('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+
     const mp3Button = page.locator('button', { hasText: 'MP3' })
     await mp3Button.click()
     await expect(mp3Button).toHaveClass(/border-accent/)
 
-    // MP4 should no longer be selected
-    const mp4Button = page.locator('button', { hasText: 'MP4 Video' })
-    await expect(mp4Button).not.toHaveClass(/border-accent/)
+    // 480p should no longer be selected
+    const defaultButton = page.locator('button', { hasText: '480p' })
+    await expect(defaultButton).not.toHaveClass(/border-accent/)
   })
 
   test('should detect valid YouTube URL', async ({ page }) => {
