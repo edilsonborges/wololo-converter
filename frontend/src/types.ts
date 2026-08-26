@@ -114,6 +114,7 @@ export interface QueueItem {
   error?: string;
   addedAt: number;
   completedAt?: number;
+  autoDownload?: boolean;
 }
 
 export interface QueueConfig {

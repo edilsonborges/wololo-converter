@@ -1,6 +1,10 @@
 """Tests for API routes"""
 import pytest
 
+from app.download_service import DownloadProgress, download_service
+from app.models import JobStatus
+from app.version import APP_VERSION
+
 
 class TestHealthEndpoint:
     async def test_health_returns_ok(self, client):
@@ -14,7 +18,7 @@ class TestHealthEndpoint:
     async def test_health_has_version(self, client):
         response = await client.get("/api/health")
         data = response.json()
-        assert data["version"] == "1.0.0"
+        assert data["version"] == APP_VERSION
 
 
 class TestValidateEndpoint:
@@ -91,6 +95,20 @@ class TestJobEndpoints:
     async def test_list_jobs_with_limit(self, client):
         response = await client.get("/api/jobs?limit=5&offset=0")
         assert response.status_code == 200
+
+    async def test_progress_replays_completion_for_fast_mp3(self, client):
+        job_id = "fast-mp3-job"
+        progress = DownloadProgress(job_id)
+        progress.status = JobStatus.COMPLETED
+        progress.progress = 100
+        progress.filename = "short-audio.mp3"
+        download_service._remember_completed(progress)
+
+        response = await client.get(f"/api/jobs/{job_id}/progress")
+
+        assert response.status_code == 200
+        assert "event: complete" in response.text
+        assert '"download_ready":true' in response.text
 
 
 class TestRootEndpoint:

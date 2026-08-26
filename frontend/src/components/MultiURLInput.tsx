@@ -1,81 +1,12 @@
 import { useState, useCallback, useEffect, type FC, type ChangeEvent, type ClipboardEvent } from 'react';
-import { PLATFORMS, type PlatformInfo } from '../types';
+import { PLATFORMS } from '../types';
+import { parseURLs, type ParsedURL } from '../urlParser';
 import { Icon, PlatformIcon } from './Icon';
 
 interface MultiURLInputProps {
   onUrlsChange: (urls: ParsedURL[]) => void;
   disabled?: boolean;
   resetTrigger?: number; // Change this to reset the input
-}
-
-export interface ParsedURL {
-  url: string;
-  platform: string | null;
-  platformInfo: PlatformInfo | null;
-  isValid: boolean;
-}
-
-// Pattern matching for platforms
-const PLATFORM_PATTERNS: Record<string, RegExp[]> = {
-  youtube: [
-    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=[\w-]+/i,
-    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/shorts\/[\w-]+/i,
-    /(?:https?:\/\/)?youtu\.be\/[\w-]+/i,
-  ],
-  instagram: [
-    /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:p|reels?|tv)\/[\w-]+/i,
-  ],
-  // Facebook temporarily hidden - not working
-  // facebook: [
-  //   /(?:https?:\/\/)?(?:www\.)?facebook\.com\/.+\/videos\/\d+/i,
-  //   /(?:https?:\/\/)?(?:www\.)?facebook\.com\/watch\/?\?v=\d+/i,
-  //   /(?:https?:\/\/)?fb\.watch\/[\w-]+/i,
-  // ],
-  tiktok: [
-    /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@[\w.]+\/video\/\d+/i,
-    /(?:https?:\/\/)?vm\.tiktok\.com\/[\w]+/i,
-    /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/t\/[\w]+/i,
-  ],
-  twitter: [
-    /(?:https?:\/\/)?(?:www\.)?(?:twitter|x)\.com\/\w+\/status\/\d+/i,
-  ],
-  threads: [
-    /(?:https?:\/\/)?(?:www\.)?threads\.(?:net|com)\/@[\w.]+\/post\/[\w]+/i,
-  ],
-};
-
-function detectPlatform(url: string): string | null {
-  const trimmedUrl = url.trim().toLowerCase();
-  for (const [platform, patterns] of Object.entries(PLATFORM_PATTERNS)) {
-    for (const pattern of patterns) {
-      if (pattern.test(trimmedUrl)) {
-        return platform;
-      }
-    }
-  }
-  return null;
-}
-
-function parseURLs(text: string): ParsedURL[] {
-  // Split by newlines, commas, or spaces and filter empty strings
-  const lines = text
-    .split(/[\n,\s]+/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-
-  // Remove duplicates
-  const uniqueUrls = [...new Set(lines)];
-
-  return uniqueUrls.map((url) => {
-    const platform = detectPlatform(url);
-    const platformInfo = platform ? PLATFORMS[platform] : null;
-    return {
-      url,
-      platform,
-      platformInfo,
-      isValid: platform !== null,
-    };
-  });
 }
 
 export const MultiURLInput: FC<MultiURLInputProps> = ({ onUrlsChange, disabled, resetTrigger }) => {

@@ -1,5 +1,10 @@
 """Tests for download service."""
 
+from types import SimpleNamespace
+
+import httpx
+
+from app import download_service as download_service_module
 from app.download_service import DownloadProgress, DownloadService
 from app.models import JobStatus, VideoQuality
 
@@ -236,6 +241,19 @@ class TestDownloadService:
         assert opts["max_filesize"] > 0
         assert opts["prefer_insecure"] is False
 
+    def test_youtube_uses_supported_default_clients(self):
+        service = DownloadService()
+        progress = DownloadProgress("test-youtube")
+
+        opts = service.get_yt_dlp_options(
+            "test-youtube",
+            VideoQuality.Q_480P,
+            progress,
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        )
+
+        assert "extractor_args" not in opts
+
     def test_register_and_unregister_callback(self):
         service = DownloadService()
         callback = lambda update: None
@@ -247,3 +265,84 @@ class TestDownloadService:
         service.unregister_callback("test-123")
 
         assert "test-123" not in service.progress_callbacks
+
+    async def test_late_progress_subscriber_receives_completed_mp3_update(
+        self,
+        monkeypatch,
+    ):
+        """A fast MP3 may finish before the browser opens its SSE stream."""
+        service = DownloadService()
+
+        def finish_immediately(url, job_id, quality, progress):
+            assert quality == VideoQuality.MP3
+            return {
+                "success": True,
+                "title": "Short audio",
+                "filename": "short-audio.mp3",
+            }
+
+        monkeypatch.setattr(service, "_run_download", finish_immediately)
+
+        job_id, task, _ = await service.start_download(
+            "https://www.youtube.com/watch?v=test123",
+            VideoQuality.MP3,
+        )
+        await task
+
+        updates = []
+        service.register_callback(job_id, updates.append)
+
+        assert len(updates) == 1
+        assert updates[0].status == JobStatus.COMPLETED
+        assert updates[0].download_ready is True
+
+    def test_threads_mp3_request_converts_custom_video_download(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        class FakeResponse:
+            headers = {"content-length": "5"}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return False
+
+            def raise_for_status(self):
+                return None
+
+            def iter_bytes(self, chunk_size):
+                yield b"video"
+
+        monkeypatch.setattr(download_service_module.settings, "temp_dir", tmp_path)
+        monkeypatch.setattr(
+            download_service_module,
+            "extract_threads_info",
+            lambda url: {
+                "title": "Thread audio",
+                "video_url": "https://cdn.example.com/video.mp4",
+                "duration": 10,
+                "thumbnail_url": None,
+            },
+        )
+        monkeypatch.setattr(httpx, "stream", lambda *args, **kwargs: FakeResponse())
+
+        def fake_ffmpeg(args, **kwargs):
+            assert "-vn" in args
+            tmp_path.joinpath("job", "Thread audio.mp3").write_bytes(b"mp3")
+            return SimpleNamespace(returncode=0, stderr=b"")
+
+        monkeypatch.setattr("subprocess.run", fake_ffmpeg)
+
+        result = DownloadService()._run_download(
+            "https://www.threads.net/@user/post/123",
+            "job",
+            VideoQuality.MP3,
+            DownloadProgress("job"),
+        )
+
+        assert result["success"] is True
+        assert result["filename"] == "Thread audio.mp3"
+        assert result["filepath"].endswith(".mp3")

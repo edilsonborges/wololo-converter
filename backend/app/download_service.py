@@ -38,44 +38,6 @@ def _has_valid_cookies_file() -> bool:
         return False
 
 
-# Browser-like User-Agent to avoid throttling on Instagram/Facebook
-_MODERN_UA = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/131.0.0.0 Safari/537.36"
-)
-
-
-def _pick_instagram_codec_strategy(info: dict, height: int) -> list[str]:
-    """Return FFmpeg postprocessor args for Instagram/Threads based on codec.
-
-    If an H.264 format within the target height is available, yt-dlp will
-    pick it (because the format selector prefers avc1), so stream copy is
-    safe and near-instant. Otherwise we re-encode to libx264 with the
-    veryfast preset for QuickTime compatibility.
-    """
-    faststart = ["-movflags", "+faststart", "-threads", "0"]
-    reencode = [
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-        "-c:a", "copy",
-        *faststart,
-    ]
-
-    formats = info.get("formats") or []
-    for fmt in formats:
-        vcodec = (fmt.get("vcodec") or "").lower()
-        h = fmt.get("height") or 0
-        if not vcodec or vcodec == "none":
-            continue
-        if not (vcodec.startswith("avc1") or vcodec.startswith("h264")):
-            continue
-        if not isinstance(h, int) or h <= 0 or h > height:
-            continue
-        return ["-c", "copy", *faststart]
-
-    return reencode
-
-
 class DownloadProgress:
     """Track download progress for a job"""
 
@@ -265,14 +227,23 @@ class DownloadProgress:
 class DownloadService:
     """Service to manage video/audio downloads"""
 
+    MAX_COMPLETED_SNAPSHOTS = 100
+
     def __init__(self):
         self.active_jobs: Dict[str, DownloadProgress] = {}
+        # Keep a bounded terminal snapshot so fast downloads that finish before
+        # the browser opens the SSE stream can still replay their final state.
+        self.completed_jobs: Dict[str, DownloadProgress] = {}
         self.progress_callbacks: Dict[str, Callable[[JobProgressUpdate], Any]] = {}
 
     def register_callback(self, job_id: str, callback: Callable[[JobProgressUpdate], Any]):
         """Register a callback for job progress updates"""
         self.progress_callbacks[job_id] = callback
-        if job_id in self.active_jobs:
+        completed = self.completed_jobs.get(job_id)
+        if completed:
+            completed.callback = callback
+            completed._notify(download_ready=completed.status == JobStatus.COMPLETED)
+        elif job_id in self.active_jobs:
             self.active_jobs[job_id].callback = callback
 
     def unregister_callback(self, job_id: str):
@@ -280,6 +251,16 @@ class DownloadService:
         self.progress_callbacks.pop(job_id, None)
         if job_id in self.active_jobs and self.active_jobs[job_id].callback:
             self.active_jobs[job_id].callback = None
+        completed = self.completed_jobs.pop(job_id, None)
+        if completed:
+            completed.callback = None
+
+    def _remember_completed(self, progress: DownloadProgress):
+        """Retain a bounded final state for late SSE subscribers."""
+        self.completed_jobs[progress.job_id] = progress
+        while len(self.completed_jobs) > self.MAX_COMPLETED_SNAPSHOTS:
+            oldest_job_id = next(iter(self.completed_jobs))
+            self.completed_jobs.pop(oldest_job_id, None)
 
     def get_yt_dlp_options(
         self,
@@ -287,7 +268,6 @@ class DownloadService:
         quality: VideoQuality,
         progress: DownloadProgress,
         url: str = "",
-        info: Optional[dict] = None,
     ) -> dict:
         """Get yt-dlp options based on quality selection"""
         # Base output path
@@ -309,9 +289,6 @@ class DownloadService:
             "socket_timeout": 30,
             "retries": 3,
             "fragment_retries": 3,
-            # Speed: parallel fragment downloads + larger HTTP chunks
-            "concurrent_fragment_downloads": 4,
-            "http_chunk_size": 10 * 1024 * 1024,
             # Security: limit file size
             "max_filesize": settings.max_file_size_mb * 1024 * 1024,
             # No external downloaders for safety
@@ -327,21 +304,6 @@ class DownloadService:
 
         # Detect platform for format/codec decisions
         platform = detect_platform(url) if url else None
-
-        # Browser-like headers reduce throttling on Instagram/Facebook
-        http_headers = {
-            "User-Agent": _MODERN_UA,
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-        if platform == "instagram":
-            http_headers["Referer"] = "https://www.instagram.com/"
-        elif platform == "facebook":
-            http_headers["Referer"] = "https://www.facebook.com/"
-        opts["http_headers"] = http_headers
-
-        # YouTube: use tv_embedded client to avoid bot detection on server IPs
-        if platform == "youtube":
-            opts["extractor_args"] = {"youtube": {"player_client": ["tv_embedded"]}}
 
         if quality == VideoQuality.MP3:
             opts.update({
@@ -360,20 +322,15 @@ class DownloadService:
             # Video quality: extract resolution number from enum value
             height = int(quality.value.replace("p", ""))
 
-            # Instagram/Threads may serve VP9 (incompatible with QuickTime).
-            # If info is available, inspect formats: when H.264 is present
-            # within the target height we can stream copy (near-instant);
-            # otherwise re-encode with libx264 veryfast.
+            # Instagram uses VP9 codec which QuickTime can't play;
+            # re-encode to H.264 for compatibility
             if platform in ("instagram", "threads"):
-                if info is not None:
-                    pp_args = _pick_instagram_codec_strategy(info, height)
-                else:
-                    pp_args = [
-                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-                        "-c:a", "copy",
-                        "-movflags", "+faststart",
-                        "-threads", "0",
-                    ]
+                pp_args = [
+                    "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                    "-c:a", "copy",
+                    "-movflags", "+faststart",
+                    "-threads", "0",
+                ]
             else:
                 pp_args = [
                     "-c", "copy",
@@ -403,6 +360,7 @@ class DownloadService:
         self,
         url: str,
         job_id: str,
+        quality: VideoQuality,
         progress: DownloadProgress,
     ) -> dict:
         """Download a Threads video using the custom extractor."""
@@ -453,6 +411,36 @@ class DownloadService:
             progress.progress = progress.DOWNLOAD_MAX
             progress._notify()
 
+            if quality == VideoQuality.MP3:
+                import subprocess
+
+                progress.status = JobStatus.CONVERTING
+                progress.current_stage = "Extracting audio..."
+                progress.progress = progress.CONVERSION_MIN
+                progress.speed = None
+                progress.eta = None
+                progress._notify()
+
+                audio_file = output_file.with_suffix(".mp3")
+                ffmpeg_result = subprocess.run(
+                    [
+                        "ffmpeg", "-i", str(output_file),
+                        "-vn", "-acodec", "libmp3lame", "-b:a", "320k",
+                        "-threads", "0", "-y", str(audio_file),
+                    ],
+                    capture_output=True,
+                    timeout=300,
+                )
+                if ffmpeg_result.returncode != 0:
+                    error = ffmpeg_result.stderr.decode(errors="replace")[:500]
+                    raise RuntimeError(f"Audio extraction failed: {error}")
+
+                output_file.unlink()
+                output_file = audio_file
+                progress.current_stage = "Finalizing..."
+                progress.progress = progress.CONVERSION_MAX
+                progress._notify()
+
             return {
                 "success": True,
                 "title": info["title"],
@@ -477,27 +465,21 @@ class DownloadService:
         # Threads: use custom extractor (yt-dlp doesn't support it)
         platform = detect_platform(url) if url else None
         if platform == "threads":
-            return self._run_threads_download(url, job_id, progress)
+            return self._run_threads_download(url, job_id, quality, progress)
 
         opts = self.get_yt_dlp_options(job_id, quality, progress, url)
 
         try:
-            progress.status = JobStatus.VALIDATING
-            progress.current_stage = "Extracting video info..."
-            progress._notify()
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                # First, extract info
+                progress.status = JobStatus.VALIDATING
+                progress.current_stage = "Extracting video info..."
+                progress._notify()
 
-            with yt_dlp.YoutubeDL(opts) as probe_ydl:
-                info = probe_ydl.extract_info(url, download=False)
+                info = ydl.extract_info(url, download=False)
                 progress.title = info.get("title", "Unknown")
 
-            # Instagram/Threads video: rebuild opts using codec info so we
-            # can stream-copy H.264 instead of always re-encoding.
-            if platform == "instagram" and quality != VideoQuality.MP3:
-                opts = self.get_yt_dlp_options(
-                    job_id, quality, progress, url, info=info,
-                )
-
-            with yt_dlp.YoutubeDL(opts) as ydl:
+                # Start download
                 progress.status = JobStatus.DOWNLOADING
                 progress.current_stage = "Starting download..."
                 progress._notify()
@@ -590,10 +572,12 @@ class DownloadService:
                     progress.progress = 100
                     progress.current_stage = "Complete!"
                     progress.filename = result["filename"]
+                    self._remember_completed(progress)
                     progress._notify(download_ready=True)
                 else:
                     progress.status = JobStatus.FAILED
                     progress.error_message = result.get("error", "Unknown error")
+                    self._remember_completed(progress)
                     progress._notify()
 
                 return result
@@ -601,6 +585,7 @@ class DownloadService:
             except Exception as e:
                 progress.status = JobStatus.FAILED
                 progress.error_message = str(e)
+                self._remember_completed(progress)
                 progress._notify()
                 return {"success": False, "error": str(e)}
 
@@ -619,9 +604,11 @@ class DownloadService:
     def cancel_job(self, job_id: str) -> bool:
         """Cancel a running job"""
         if job_id in self.active_jobs:
-            self.active_jobs[job_id].status = JobStatus.CANCELLED
-            self.active_jobs[job_id].error_message = "Cancelled by user"
-            self.active_jobs[job_id]._notify()
+            progress = self.active_jobs[job_id]
+            progress.status = JobStatus.CANCELLED
+            progress.error_message = "Cancelled by user"
+            self._remember_completed(progress)
+            progress._notify()
             return True
         return False
 
@@ -653,11 +640,6 @@ def extract_video_preview(url: str) -> dict:
         opts["cookiefile"] = settings.cookies_file
     elif settings.cookies_from_browser:
         opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
-
-    # YouTube: use tv_embedded client to avoid bot detection on server IPs
-    platform = detect_platform(url) if url else None
-    if platform == "youtube":
-        opts["extractor_args"] = {"youtube": {"player_client": ["tv_embedded"]}}
 
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:

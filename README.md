@@ -13,10 +13,26 @@ A personal-use web application for downloading videos and audio from social netw
 
 - Download videos in best quality (up to 4K)
 - Extract audio only (MP3 or M4A)
+- Start and download automatically by placing a supported URL after the app domain
 - Real-time progress tracking with SSE
 - Automatic file cleanup
 - Rate limiting for stability
 - Secure URL validation (SSRF protection)
+
+## Direct automatic download
+
+Place any supported YouTube, Instagram, TikTok, Threads, or Twitter/X video URL
+directly after the Wololo domain. The app starts it with the default `480p`
+quality and downloads the resulting file automatically:
+
+```text
+https://wololo.edilson.dev/https://x.com/user/status/123?s=48
+https://wololo.edilson.dev/x.com/user/status/123?s=48
+```
+
+Tracking, playback-time, playlist, sharing, and fragment parameters are removed
+before processing. YouTube watch URLs are converted to parameter-free `youtu.be`
+URLs while retaining the video ID.
 
 ## Tech Stack
 
@@ -63,8 +79,48 @@ docker-compose up -d --build
 ```
 
 The application will be available at:
-- Frontend: http://localhost
-- API: http://localhost:8000/docs
+- Frontend: http://localhost:47651
+- API: http://localhost:47652/docs
+
+## Updating a deployed machine
+
+Deployments are pinned to GitHub release tags. On the machine that already has
+the repository cloned, update to the latest release with:
+
+```bash
+./scripts/update.sh latest
+```
+
+To install or roll back to a specific version:
+
+```bash
+./scripts/update.sh v0.6.0
+```
+
+The updater refuses to overwrite tracked local changes, fetches release tags,
+checks out the selected version, rebuilds the Docker services, and waits for the
+backend health check. Keep machine-specific credentials in the ignored
+`cookies.txt` file; release updates do not replace it.
+
+Set `WOLOLO_HEALTH_URL` when the backend is exposed on a different local URL.
+
+## Creating a release
+
+Versions must match in `VERSION`, `backend/app/version.py`, and the frontend
+package files, with a corresponding entry in `CHANGELOG.md`. Verify them with:
+
+```bash
+./scripts/check-version.sh
+```
+
+After committing the release changes to a clean `main` branch, publish the tag:
+
+```bash
+./scripts/release.sh
+```
+
+The tag workflow runs backend and frontend validation before creating the GitHub
+Release with generated notes.
 
 ## Configuration
 

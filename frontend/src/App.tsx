@@ -3,6 +3,8 @@ import { MultiURLInput, QueueManager, QualitySelector, VideoPreview, Icon, type 
 import { useQueueManager } from './hooks/useQueueManager';
 import { api } from './api';
 import type { VideoQuality, PreviewResponse } from './types';
+import { parseAutoDownloadRoute } from './urlParser';
+import packageJson from '../package.json';
 
 function App() {
   // Form state
@@ -16,6 +18,7 @@ function App() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPreviewUrlRef = useRef<string | null>(null);
+  const autoDownloadRouteHandledRef = useRef(false);
 
   // Queue manager hook
   const {
@@ -32,6 +35,19 @@ function App() {
     extractAudio,
     extractingAudio,
   } = useQueueManager();
+
+  // A supported URL placed directly after the app root starts immediately
+  // with the default quality and downloads the result when processing ends.
+  useEffect(() => {
+    if (autoDownloadRouteHandledRef.current) return;
+    autoDownloadRouteHandledRef.current = true;
+
+    const parsed = parseAutoDownloadRoute(window.location);
+    if (!parsed) return;
+
+    addToQueue([parsed], '480p', { autoDownload: true });
+    window.history.replaceState({}, '', '/');
+  }, [addToQueue]);
 
   const handleUrlsChange = useCallback((urls: ParsedURL[]) => {
     setParsedUrls(urls);
@@ -227,7 +243,7 @@ function App() {
       {/* Footer */}
       <footer className="py-6 px-4 text-center text-text-muted text-sm border-t border-border-light">
         <p>Personal use only. Respect copyright and platform terms of service.</p>
-        <p className="mt-1 text-text-muted/50 text-xs">v0.5.0</p>
+        <p className="mt-1 text-text-muted/50 text-xs">v{packageJson.version}</p>
       </footer>
     </div>
   );

@@ -8,6 +8,10 @@ interface ParsedURL {
   isValid: boolean;
 }
 
+interface AddToQueueOptions {
+  autoDownload?: boolean;
+}
+
 // Generate unique ID
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -33,7 +37,11 @@ export function useQueueManager() {
   }, []);
 
   // Add URLs to queue
-  const addToQueue = useCallback((parsedUrls: ParsedURL[], quality: VideoQuality) => {
+  const addToQueue = useCallback((
+    parsedUrls: ParsedURL[],
+    quality: VideoQuality,
+    options: AddToQueueOptions = {},
+  ) => {
     const validUrls = parsedUrls.filter((u) => u.isValid);
 
     const newItems: QueueItem[] = validUrls.map((parsed) => ({
@@ -43,6 +51,7 @@ export function useQueueManager() {
       quality,
       status: 'pending' as QueueItemStatus,
       addedAt: Date.now(),
+      autoDownload: options.autoDownload,
     }));
 
     setItems((prev) => [...prev, ...newItems]);
@@ -182,6 +191,10 @@ export function useQueueManager() {
 
           // Cleanup SSE ref
           cleanupRefs.current.delete(item.id);
+
+          if (update.status === 'completed' && item.autoDownload) {
+            downloadFile(response.job_id);
+          }
         },
         onError: (err) => {
           updateItem(item.id, {
@@ -203,7 +216,7 @@ export function useQueueManager() {
         completedAt: Date.now(),
       });
     }
-  }, [updateItem]);
+  }, [downloadFile, updateItem]);
 
   // Process the queue
   const processQueue = useCallback(async () => {

@@ -8,7 +8,7 @@ from app.models import JobStatus, OutputFormat, VideoQuality
 class TestDownloadRequest:
     def test_valid_request(self):
         req = DownloadRequest(url="https://www.youtube.com/watch?v=test123")
-        assert req.url == "https://www.youtube.com/watch?v=test123"
+        assert req.url == "https://youtu.be/test123"
         assert req.quality == VideoQuality.Q_480P
         assert req.output_format is None
 
@@ -31,7 +31,18 @@ class TestDownloadRequest:
 
     def test_url_whitespace_stripped(self):
         req = DownloadRequest(url="  https://www.youtube.com/watch?v=test123  ")
-        assert req.url == "https://www.youtube.com/watch?v=test123"
+        assert req.url == "https://youtu.be/test123"
+
+    def test_tracking_and_playback_parameters_are_removed(self):
+        youtube = DownloadRequest(
+            url="https://www.youtube.com/watch?list=playlist&v=test123&t=95"
+        )
+        instagram = DownloadRequest(
+            url="https://www.instagram.com/reel/ABC123/?igsh=tracking#fragment"
+        )
+
+        assert youtube.url == "https://youtu.be/test123"
+        assert instagram.url == "https://www.instagram.com/reel/ABC123/"
 
 
 class TestJobProgressUpdate:

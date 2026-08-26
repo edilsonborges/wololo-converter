@@ -7,6 +7,7 @@ from app.utils import (
     sanitize_filename,
     format_file_size,
     format_duration,
+    normalize_video_url,
 )
 
 
@@ -23,6 +24,12 @@ class TestDetectPlatform:
     def test_youtube_embed(self):
         assert detect_platform("https://www.youtube.com/embed/dQw4w9WgXcQ") == "youtube"
 
+    def test_youtube_mobile_watch(self):
+        assert detect_platform("https://m.youtube.com/watch?v=dQw4w9WgXcQ") == "youtube"
+
+    def test_youtube_live(self):
+        assert detect_platform("https://www.youtube.com/live/dQw4w9WgXcQ") == "youtube"
+
     def test_instagram_reel(self):
         assert detect_platform("https://www.instagram.com/reel/ABC123/") == "instagram"
 
@@ -31,6 +38,9 @@ class TestDetectPlatform:
 
     def test_instagram_reels(self):
         assert detect_platform("https://www.instagram.com/reels/DWKQUcak0hC/") == "instagram"
+
+    def test_instagram_shared_reel(self):
+        assert detect_platform("https://www.instagram.com/share/reel/ABC123/") == "instagram"
 
     def test_twitter(self):
         assert detect_platform("https://twitter.com/user/status/123456789") == "twitter"
@@ -52,6 +62,9 @@ class TestDetectPlatform:
 
     def test_tiktok_short_url(self):
         assert detect_platform("https://vm.tiktok.com/ZMkABC123/") == "tiktok"
+
+    def test_tiktok_vt_short_url(self):
+        assert detect_platform("https://vt.tiktok.com/ZMkABC123/") == "tiktok"
 
     def test_tiktok_t_url(self):
         assert detect_platform("https://www.tiktok.com/t/ZTF123abc/") == "tiktok"
@@ -87,6 +100,9 @@ class TestIsAllowedDomain:
 
     def test_tiktok_vm_allowed(self):
         assert is_allowed_domain("https://vm.tiktok.com/ZMkABC/") is True
+
+    def test_tiktok_vt_allowed(self):
+        assert is_allowed_domain("https://vt.tiktok.com/ZMkABC/") is True
 
     def test_unknown_domain_rejected(self):
         assert is_allowed_domain("https://evil.com/video") is False
@@ -134,6 +150,23 @@ class TestValidateUrl:
     def test_whitespace_trimmed(self):
         is_valid, platform, error = validate_url("  https://www.youtube.com/watch?v=dQw4w9WgXcQ  ")
         assert is_valid is True
+
+
+class TestNormalizeVideoUrl:
+    def test_youtube_watch_becomes_parameter_free_short_url(self):
+        result = normalize_video_url(
+            "https://www.youtube.com/watch?list=playlist&v=dQw4w9WgXcQ&t=95"
+        )
+
+        assert result == "https://youtu.be/dQw4w9WgXcQ"
+
+    def test_other_platform_parameters_and_fragments_are_removed(self):
+        assert normalize_video_url(
+            "https://x.com/user/status/123?s=48#video"
+        ) == "https://x.com/user/status/123"
+        assert normalize_video_url(
+            "https://www.instagram.com/reel/ABC123/?igsh=tracking"
+        ) == "https://www.instagram.com/reel/ABC123/"
 
 
 class TestSanitizeFilename:

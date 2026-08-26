@@ -12,6 +12,7 @@ from .config import settings
 from .database import init_db
 from .routes import router, limiter
 from .utils import run_cleanup_task
+from .version import APP_VERSION
 
 
 # Background task handle
@@ -55,7 +56,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     description="Personal video/audio downloader for YouTube, Instagram, Facebook, and Twitter/X",
-    version="1.0.0",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -96,7 +97,7 @@ async def root():
     """Root endpoint - returns API info"""
     return {
         "name": settings.app_name,
-        "version": "1.0.0",
+        "version": APP_VERSION,
         "docs": "/docs",
         "health": "/api/health",
     }

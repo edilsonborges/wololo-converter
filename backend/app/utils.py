@@ -4,7 +4,7 @@ import re
 import shutil
 from pathlib import Path
 from typing import Optional, Tuple
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 import asyncio
 
 from .config import settings
@@ -13,13 +13,15 @@ from .config import settings
 # Platform detection patterns
 PLATFORM_PATTERNS = {
     "youtube": [
-        r"(?:https?://)?(?:www\.)?youtube\.com/watch\?v=[\w-]+",
-        r"(?:https?://)?(?:www\.)?youtube\.com/shorts/[\w-]+",
+        r"(?:https?://)?(?:(?:www|m|music)\.)?youtube\.com/watch\?(?:[^#]*&)?v=[\w-]+",
+        r"(?:https?://)?(?:(?:www|m)\.)?youtube\.com/shorts/[\w-]+",
+        r"(?:https?://)?(?:(?:www|m)\.)?youtube\.com/live/[\w-]+",
         r"(?:https?://)?youtu\.be/[\w-]+",
-        r"(?:https?://)?(?:www\.)?youtube\.com/embed/[\w-]+",
+        r"(?:https?://)?(?:(?:www|m)\.)?youtube\.com/embed/[\w-]+",
     ],
     "instagram": [
         r"(?:https?://)?(?:www\.)?instagram\.com/(?:p|reels?|tv)/[\w-]+",
+        r"(?:https?://)?(?:www\.)?instagram\.com/share/(?:p|reel)/[\w-]+",
     ],
     "facebook": [
         r"(?:https?://)?(?:www\.)?facebook\.com/.+/videos/\d+",
@@ -34,7 +36,7 @@ PLATFORM_PATTERNS = {
     ],
     "tiktok": [
         r"(?:https?://)?(?:www\.)?tiktok\.com/@[\w.]+/video/\d+",
-        r"(?:https?://)?vm\.tiktok\.com/[\w]+",
+        r"(?:https?://)?(?:vm|vt)\.tiktok\.com/[\w]+",
         r"(?:https?://)?(?:www\.)?tiktok\.com/t/[\w]+",
     ],
 }
@@ -50,6 +52,32 @@ def detect_platform(url: str) -> Optional[str]:
                 return platform
 
     return None
+
+
+def normalize_video_url(url: str) -> str:
+    """Remove non-identifying parameters and return a canonical video URL."""
+    platform = detect_platform(url)
+    if not platform:
+        return url
+
+    parsed = urlparse(url)
+
+    if platform == "youtube" and parsed.path == "/watch":
+        video_ids = parse_qs(parsed.query).get("v")
+        if video_ids:
+            return f"https://youtu.be/{video_ids[0]}"
+
+    if platform == "youtube" and parsed.netloc.lower().split(":", 1)[0] == "youtu.be":
+        video_id = next((part for part in parsed.path.split("/") if part), None)
+        if video_id:
+            return f"https://youtu.be/{video_id}"
+
+    return parsed._replace(
+        scheme="https",
+        params="",
+        query="",
+        fragment="",
+    ).geturl()
 
 
 def is_allowed_domain(url: str) -> bool:

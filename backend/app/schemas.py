@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, HttpUrl, field_validator
 from urllib.parse import urlparse
 
 from .models import JobStatus, OutputFormat, VideoQuality
+from .utils import normalize_video_url
 
 
 class PreviewRequest(BaseModel):
@@ -24,7 +25,7 @@ class PreviewRequest(BaseModel):
                 raise ValueError("Invalid URL format")
         except Exception:
             raise ValueError("Invalid URL format")
-        return v
+        return normalize_video_url(v)
 
 
 class PreviewResponse(BaseModel):
@@ -61,7 +62,7 @@ class DownloadRequest(BaseModel):
                 raise ValueError("Invalid URL format")
         except Exception:
             raise ValueError("Invalid URL format")
-        return v
+        return normalize_video_url(v)
 
 
 class URLValidationResponse(BaseModel):

@@ -29,6 +29,7 @@ from .schemas import (
 )
 from .download_service import download_service, get_yt_dlp_version, extract_video_preview, executor
 from .utils import validate_url, get_directory_size, format_file_size
+from .version import APP_VERSION
 
 
 # Rate limiter
@@ -49,7 +50,7 @@ async def health_check():
 
     return HealthResponse(
         status="healthy",
-        version="1.0.0",
+        version=APP_VERSION,
         yt_dlp_version=get_yt_dlp_version(),
         active_downloads=download_service.active_count,
         temp_dir_size_mb=round(temp_size / 1024 / 1024, 2),
@@ -110,13 +111,21 @@ async def start_download(
         )
 
     try:
+        event_loop = asyncio.get_running_loop()
+
         # Create progress callback for SSE
         def progress_callback(update: JobProgressUpdate):
-            if update.job_id in sse_connections:
+            def enqueue_update():
+                queue = sse_connections.get(update.job_id)
+                if not queue:
+                    return
                 try:
-                    sse_connections[update.job_id].put_nowait(update)
+                    queue.put_nowait(update)
                 except asyncio.QueueFull:
                     pass
+
+            # yt-dlp invokes progress hooks from its worker thread.
+            event_loop.call_soon_threadsafe(enqueue_update)
 
         # Resolve quality: use quality field, fallback to output_format for backward compat
         quality = download_request.quality
@@ -200,18 +209,23 @@ async def job_progress_sse(job_id: str, request: Request):
     # Create queue for this connection
     queue: asyncio.Queue[JobProgressUpdate] = asyncio.Queue(maxsize=50)
     sse_connections[job_id] = queue
+    event_loop = asyncio.get_running_loop()
 
     # Register callback with download service
     def callback(update: JobProgressUpdate):
-        try:
-            queue.put_nowait(update)
-        except asyncio.QueueFull:
-            # Drop old messages if queue is full
+        def enqueue_update():
             try:
-                queue.get_nowait()
                 queue.put_nowait(update)
-            except Exception:
-                pass
+            except asyncio.QueueFull:
+                # Drop the oldest message if the queue is full.
+                try:
+                    queue.get_nowait()
+                    queue.put_nowait(update)
+                except Exception:
+                    pass
+
+        # Progress callbacks may run inside the yt-dlp worker thread.
+        event_loop.call_soon_threadsafe(enqueue_update)
 
     download_service.register_callback(job_id, callback)
 
