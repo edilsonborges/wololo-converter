@@ -6,6 +6,27 @@ function route(pathname: string, search = '', hash = '') {
 }
 
 describe('parseAutoDownloadRoute', () => {
+  it.each(['www.threads.com', 'threads.com', 'www.threads.net'])(
+    'accepts pasted Threads share links from %s and preserves the share code',
+    (domain) => {
+      const url = `https://${domain}/share/BAR2SGFo1r/`;
+      expect(parseURLs(`${url}?tracking=1`)[0]).toMatchObject({
+        url,
+        platform: 'threads',
+        isValid: true,
+      });
+    },
+  );
+
+  it('accepts a Threads share link through the direct download route', () => {
+    expect(parseAutoDownloadRoute(route('/https://www.threads.com/share/BAR2SGFo1r/')))
+      .toMatchObject({
+        url: 'https://www.threads.com/share/BAR2SGFo1r/',
+        platform: 'threads',
+        isValid: true,
+      });
+  });
+
   it('accepts a full source URL after the root and removes its query', () => {
     const result = parseAutoDownloadRoute(route(
       '/https://x.com/pardald3sign/status/2092425556650242194',

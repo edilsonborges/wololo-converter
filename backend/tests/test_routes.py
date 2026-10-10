@@ -22,6 +22,13 @@ class TestHealthEndpoint:
 
 
 class TestValidateEndpoint:
+    async def test_validate_threads_share_link(self, client):
+        response = await client.post("/api/validate", json={
+            "url": "https://www.threads.com/share/BAR2SGFo1r/",
+        })
+        assert response.status_code == 200
+        assert response.json() == {"valid": True, "platform": "threads", "error": None}
+
     async def test_validate_valid_youtube(self, client):
         response = await client.post("/api/validate", json={
             "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"

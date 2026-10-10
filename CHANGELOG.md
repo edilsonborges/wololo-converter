@@ -3,6 +3,14 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] - 2026-10-10
+
+### Fixed
+
+- Recognize Threads `/share/...` links in the frontend and backend so shared
+  videos can be downloaded as MP4 or MP3.
+- Accept Threads share links through direct automatic download routes.
+
 ## [0.6.0] - 2026-08-26
 
 ### Added

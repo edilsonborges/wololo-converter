@@ -33,6 +33,7 @@ PLATFORM_PATTERNS = {
     ],
     "threads": [
         r"(?:https?://)?(?:www\.)?threads\.(?:net|com)/@[\w.]+/post/[\w]+",
+        r"(?:https?://)?(?:www\.)?threads\.(?:net|com)/share/[\w-]+(?:/|[?#]|$)",
     ],
     "tiktok": [
         r"(?:https?://)?(?:www\.)?tiktok\.com/@[\w.]+/video/\d+",

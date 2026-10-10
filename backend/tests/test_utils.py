@@ -57,6 +57,10 @@ class TestDetectPlatform:
     def test_threads_com(self):
         assert detect_platform("https://www.threads.com/@zheray_kjr/post/DWMrfYPEons") == "threads"
 
+    @pytest.mark.parametrize("domain", ["www.threads.com", "threads.com", "www.threads.net"])
+    def test_threads_share(self, domain):
+        assert detect_platform(f"https://{domain}/share/BAR2SGFo1r/") == "threads"
+
     def test_tiktok_video(self):
         assert detect_platform("https://www.tiktok.com/@tvxmfdr2763/video/7589582058448588062") == "tiktok"
 
@@ -115,6 +119,11 @@ class TestIsAllowedDomain:
 
 
 class TestValidateUrl:
+    def test_threads_share_link(self):
+        assert validate_url("https://www.threads.com/share/BAR2SGFo1r/") == (
+            True, "threads", None,
+        )
+
     def test_valid_youtube_url(self):
         is_valid, platform, error = validate_url("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
         assert is_valid is True

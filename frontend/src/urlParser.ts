@@ -30,6 +30,7 @@ const PLATFORM_PATTERNS: Record<string, RegExp[]> = {
   ],
   threads: [
     /(?:https?:\/\/)?(?:www\.)?threads\.(?:net|com)\/@[\w.]+\/post\/[\w]+/i,
+    /(?:https?:\/\/)?(?:www\.)?threads\.(?:net|com)\/share\/[\w-]+(?:\/|[?#]|$)/i,
   ],
 };
 
