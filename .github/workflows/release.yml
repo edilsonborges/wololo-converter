@@ -9,9 +9,15 @@ permissions:
   contents: write
 
 jobs:
+  mobile:
+    name: Validate mobile apps
+    uses: ./.github/workflows/mobile.yml
+    secrets: inherit
+
   validate-and-release:
     name: Validate and publish release
     runs-on: ubuntu-latest
+    needs: mobile
 
     steps:
       - uses: actions/checkout@v4
@@ -48,11 +54,30 @@ jobs:
           npm run test
           npm run build
 
+      - name: Download installable mobile artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wololo-release-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Prepare release notes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          version = Path('VERSION').read_text().strip()
+          changelog = Path('CHANGELOG.md').read_text()
+          section = changelog.split(f'## [{version}]', 1)[1]
+          body = section.split('\n', 1)[1].split('\n## [', 1)[0].strip()
+          Path('release-notes.md').write_text(body + '\n')
+          PY
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: >-
           gh release create "$GITHUB_REF_NAME"
+          release-assets/*
           --verify-tag
-          --generate-notes
+          --notes-file release-notes.md
           --title "Wololo Converter $GITHUB_REF_NAME"

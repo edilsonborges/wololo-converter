@@ -3,6 +3,25 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] - 2026-11-08
+
+### Added
+
+- Native iOS app and Share Extension with MP4 and MP3 downloads, local history, and server settings.
+- Native Android app with a share target, background downloads, and gallery or music saving.
+- Mobile build checks and signed Android APK artifacts in GitHub Actions.
+- Optional per-person access keys and a configurable minimum mobile app version.
+
+### Changed
+
+- Downloads wait in a bounded server queue when all execution slots are occupied.
+- Waiting time is excluded from the download timeout, and cancelling a queued item releases its place.
+
+### Fixed
+
+- Interrupted jobs receive a clear error after a server restart.
+- Polling job progress no longer risks overwriting a finished job in the database.
+
 ## [0.8.2] - 2026-11-08
 
 ### Fixed

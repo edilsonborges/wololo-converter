@@ -12,6 +12,9 @@ services:
       - TEMP_DIR=/tmp/wololo
       - DATABASE_URL=sqlite+aiosqlite:///./data/wololo.db
       - MAX_CONCURRENT_DOWNLOADS=3
+      - MAX_QUEUED_DOWNLOADS=${MAX_QUEUED_DOWNLOADS:-20}
+      - API_KEYS=${API_KEYS:-}
+      - MIN_APP_VERSION=${MIN_APP_VERSION:-1.0.0}
       - RATE_LIMIT_DOWNLOADS=10/minute
       - COOKIES_FILE=/app/cookies.txt
     volumes:

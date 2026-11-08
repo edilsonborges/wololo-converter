@@ -11,10 +11,10 @@ from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sse_starlette.sse import EventSourceResponse
 
 from .config import settings
+from .access import rate_limit_identity, validate_api_key
 from .database import get_session, get_db_context
 from .models import DownloadJob, JobStatus, OutputFormat, VideoQuality, utcnow
 from .schemas import (
@@ -34,6 +34,7 @@ from . import music_links
 from .download_service import (
     TEMP_SUFFIXES,
     DownloadProgress,
+    DownloadQueueFull,
     download_service,
     get_yt_dlp_version,
     extract_video_preview,
@@ -46,10 +47,10 @@ from .version import APP_VERSION
 logger = logging.getLogger(__name__)
 
 # Rate limiter
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=rate_limit_identity)
 
 # Router
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(validate_api_key)])
 
 # Store for SSE connections and active download tasks
 sse_connections: Dict[str, asyncio.Queue] = {}
@@ -69,6 +70,7 @@ async def persist_job_result(progress: DownloadProgress, result: dict) -> None:
         "current_stage": progress.current_stage,
         "error_message": progress.error_message,
         "completed_at": utcnow(),
+        "started_at": progress.started_at,
     }
     if progress.title:
         values["title"] = progress.title
@@ -121,6 +123,7 @@ async def health_check():
     return HealthResponse(
         status="healthy",
         version=APP_VERSION,
+        min_app_version=settings.min_app_version,
         yt_dlp_version=get_yt_dlp_version(),
         active_downloads=download_service.active_count,
         temp_dir_size_mb=round(temp_size / 1024 / 1024, 2),
@@ -196,13 +199,6 @@ async def start_download(
     if not is_valid:
         raise HTTPException(status_code=400, detail=error)
 
-    # Check concurrent download limit
-    if download_service.active_count >= settings.max_concurrent_downloads:
-        raise HTTPException(
-            status_code=429,
-            detail=f"Too many concurrent downloads. Maximum is {settings.max_concurrent_downloads}.",
-        )
-
     try:
         event_loop = asyncio.get_running_loop()
 
@@ -249,10 +245,11 @@ async def start_download(
             quality=quality.value,
             status=JobStatus.QUEUED.value,
             created_at=utcnow(),
-            started_at=utcnow(),
         )
-        db.add(job)
-        await db.commit()
+
+        async def persist_queued_job():
+            db.add(job)
+            await db.commit()
 
         # Start download
         job_id, task, _ = await download_service.start_download(
@@ -261,6 +258,7 @@ async def start_download(
             progress_callback=progress_callback,
             job_id=job_id,
             on_finish=persist_job_result,
+            on_enqueue=persist_queued_job,
         )
 
         # Track the task until it finishes
@@ -273,6 +271,8 @@ async def start_download(
             status=JobStatus.QUEUED,
         )
 
+    except DownloadQueueFull as e:
+        raise HTTPException(status_code=429, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -289,16 +289,18 @@ async def get_job_status(job_id: str, db: AsyncSession = Depends(get_session)):
         raise HTTPException(status_code=404, detail="Job not found")
 
     # Update with live progress if available
+    response = JobResponse.model_validate(job)
     progress = download_service.get_job_progress(job_id)
     if progress:
-        job.status = progress.status.value
-        job.progress = progress.progress
-        job.speed = progress.speed
-        job.eta = progress.eta
-        job.current_stage = progress.current_stage
-        job.title = progress.title
+        response.status = progress.status
+        response.progress = progress.progress
+        response.speed = progress.speed
+        response.eta = progress.eta
+        response.current_stage = progress.current_stage
+        response.title = progress.title
+        response.started_at = progress.started_at
 
-    return JobResponse.model_validate(job)
+    return response
 
 
 @router.get("/jobs/{job_id}/progress")

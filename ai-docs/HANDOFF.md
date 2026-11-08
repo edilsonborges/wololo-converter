@@ -3,6 +3,14 @@
 Data: 2026-11-08 · Estado do repo no handoff: `main` em v0.8.1 (`8eb38f3`)
 Dono: Edilson (fala português; interface do produto é em inglês)
 
+## Atualização de implementação em 2026-11-08
+
+- O ambiente atual tem macOS 26.7.2, Xcode 26.2, Android SDK 35/36 e JDK 21 do Android Studio. O diagnóstico antigo de Monterey está superado neste Mac.
+- O dono aprovou GitHub Actions, os IDs `dev.edilson.wololo`, `dev.edilson.wololo.share` e `group.dev.edilson.wololo`, além de push, release e envio ao TestFlight.
+- O Marco 1 está implementado, com fila de 3 ativos e 20 aguardando, autenticação opcional por chave e `min_app_version` configurável. A versão padrão mínima dos apps é 1.0.0.
+- Os apps usam versões próprias. A próxima versão do repositório é 0.9.0 e a primeira versão dos apps é 1.0.0.
+- Consulte `mobile/README.md` para build, assinatura, secrets e limitações de execução da extensão em segundo plano.
+
 ## 1. Objetivo do trabalho
 
 Construir dois apps nativos e leves, **Swift/SwiftUI (iOS)** e **Kotlin (Android)**, que aparecem na folha de

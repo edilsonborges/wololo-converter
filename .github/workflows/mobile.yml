@@ -1,0 +1,99 @@
+name: Mobile
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        required: false
+      ANDROID_KEYSTORE_PASSWORD:
+        required: false
+      ANDROID_KEY_ALIAS:
+        required: false
+      ANDROID_KEY_PASSWORD:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    name: iOS build and tests
+    runs-on: macos-26
+    timeout-minutes: 25
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test shared package
+        working-directory: mobile/ios/Packages/WololoKit
+        run: swift test
+      - name: Build app and share extension
+        run: >-
+          xcodebuild -project mobile/ios/Wololo.xcodeproj -scheme Wololo
+          -configuration Release -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/WololoDerivedData"
+          CODE_SIGNING_ALLOWED=NO build
+      - name: Test iOS app launch and settings
+        run: >-
+          xcodebuild -project mobile/ios/Wololo.xcodeproj -scheme WololoUITests
+          -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
+          -derivedDataPath "$RUNNER_TEMP/WololoUITests"
+          CODE_SIGNING_ALLOWED=NO test
+      - name: Verify device archive
+        run: >-
+          xcodebuild -project mobile/ios/Wololo.xcodeproj -scheme Wololo
+          -configuration Release -destination 'generic/platform=iOS'
+          -archivePath "$RUNNER_TEMP/Wololo.xcarchive"
+          CODE_SIGNING_ALLOWED=NO archive
+
+  android:
+    name: Android build and tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      HAS_SIGNING: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    defaults:
+      run:
+        working-directory: mobile/android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test and build
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: wololo-android-debug
+          path: mobile/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+      - name: Build signed release APK
+        if: github.event_name != 'pull_request' && env.HAS_SIGNING == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          WOLOLO_KEYSTORE_FILE: ${{ runner.temp }}/wololo-android.jks
+          WOLOLO_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          WOLOLO_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          WOLOLO_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          trap 'rm -f "$WOLOLO_KEYSTORE_FILE"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$WOLOLO_KEYSTORE_FILE"
+          chmod 600 "$WOLOLO_KEYSTORE_FILE"
+          ./gradlew --no-daemon assembleRelease
+          mkdir -p release
+          cp app/build/outputs/apk/release/app-release.apk release/Wololo-Android.apk
+      - name: Upload signed APK
+        if: github.event_name != 'pull_request' && env.HAS_SIGNING == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wololo-release-android
+          path: mobile/android/release/*.apk
+          if-no-files-found: error

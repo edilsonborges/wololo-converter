@@ -4,9 +4,10 @@ from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
+from sqlalchemy import update
 
 from .config import settings
-from .models import Base
+from .models import Base, DownloadJob, JobStatus, utcnow
 
 # Create async engine
 engine = create_async_engine(
@@ -25,9 +26,25 @@ async_session_maker = async_sessionmaker(
 
 
 async def init_db() -> None:
-    """Initialize database tables"""
+    """Initialize tables and finish jobs interrupted by a server restart."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(
+            update(DownloadJob)
+            .where(DownloadJob.status.in_([
+                JobStatus.QUEUED.value, JobStatus.VALIDATING.value,
+                JobStatus.DOWNLOADING.value, JobStatus.CONVERTING.value,
+                JobStatus.FINALIZING.value,
+            ]))
+            .values(
+                status=JobStatus.FAILED.value,
+                error_message="Server restarted before the download completed. Please try again.",
+                current_stage="Interrupted",
+                speed=None,
+                eta=None,
+                completed_at=utcnow(),
+            )
+        )
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:

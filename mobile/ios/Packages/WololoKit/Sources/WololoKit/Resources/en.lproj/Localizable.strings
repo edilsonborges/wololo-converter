@@ -1,0 +1,15 @@
+"Enter a valid HTTPS server address." = "Enter a valid HTTPS server address.";
+"The server returned an invalid download identifier." = "The server returned an invalid download identifier.";
+"The server returned an unexpected response." = "The server returned an unexpected response.";
+"This download is taking longer than expected. Open Wololo to resume checking it." = "This download is taking longer than expected. Open Wololo to resume checking it.";
+"The download was cancelled." = "The download was cancelled.";
+"Your access key was rejected. Check it in Settings." = "Your access key was rejected. Check it in Settings.";
+"This download is no longer available. Please try again." = "This download is no longer available. Please try again.";
+"The server is busy. Please wait a moment and try again." = "The server is busy. Please wait a moment and try again.";
+"The server could not complete this request. Please try again later." = "The server could not complete this request. Please try again later.";
+"The server rejected this request. Please check the link and try again." = "The server rejected this request. Please check the link and try again.";
+"Shared storage is unavailable. Open Wololo and check the app installation." = "Shared storage is unavailable. Open Wololo and check the app installation.";
+"This download is no longer in the queue." = "This download is no longer in the queue.";
+"The download filename is invalid." = "The download filename is invalid.";
+"The download queue could not be opened. Please try again." = "The download queue could not be opened. Please try again.";
+"The access key could not be read or saved. Please check the app signing and try again." = "The access key could not be read or saved. Please check the app signing and try again.";

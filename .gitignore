@@ -52,3 +52,22 @@ htmlcov/
 
 # Cookies (sensitive auth tokens)
 cookies.txt
+
+# Native mobile builds and local signing material
+.build/
+.swiftpm/
+.gradle/
+.kotlin/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+local.properties
+*.jks
+*.keystore
+*.p12
+*.p8
+*.mobileprovision
+*.xcarchive/
+*.ipa
+*.apk
+*.aab

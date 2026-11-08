@@ -129,6 +129,7 @@ class HealthResponse(BaseModel):
     """Health check response"""
     status: str
     version: str
+    min_app_version: str
     yt_dlp_version: str
     active_downloads: int
     temp_dir_size_mb: float

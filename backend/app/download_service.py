@@ -12,7 +12,7 @@ import yt_dlp
 from concurrent.futures import ThreadPoolExecutor
 
 from .config import settings
-from .models import JobStatus, OutputFormat, VideoQuality, DownloadJob
+from .models import JobStatus, OutputFormat, VideoQuality, DownloadJob, utcnow
 from .schemas import JobProgressUpdate
 from .utils import get_safe_filepath, sanitize_filename, validate_url, detect_platform
 from .threads_extractor import extract_threads_info
@@ -25,6 +25,10 @@ executor = ThreadPoolExecutor(max_workers=settings.max_concurrent_downloads)
 
 # yt-dlp intermediate artifacts that are never a finished output
 TEMP_SUFFIXES = (".part", ".ytdl", ".temp")
+
+
+class DownloadQueueFull(Exception):
+    """All execution and waiting slots have been reserved."""
 
 
 def format_speed(bytes_per_second: Optional[float]) -> Optional[str]:
@@ -104,6 +108,7 @@ class DownloadProgress:
         # to abort the download
         self.cancel_event = threading.Event()
         self.timed_out = False
+        self.started_at: Optional[datetime] = None
 
     @property
     def cancelled(self) -> bool:
@@ -274,6 +279,8 @@ class DownloadService:
 
     def __init__(self):
         self.active_jobs: Dict[str, DownloadProgress] = {}
+        self._waiting_jobs: Dict[str, asyncio.Event] = {}
+        self._running_jobs: set[str] = set()
         # Keep a bounded terminal snapshot so fast downloads that finish before
         # the browser opens the SSE stream can still replay their final state.
         self.completed_jobs: Dict[str, DownloadProgress] = {}
@@ -592,6 +599,7 @@ class DownloadService:
         progress_callback: Optional[Callable[[JobProgressUpdate], Any]] = None,
         job_id: Optional[str] = None,
         on_finish: Optional[Callable[["DownloadProgress", dict], Awaitable[Any]]] = None,
+        on_enqueue: Optional[Callable[[], Awaitable[Any]]] = None,
     ) -> tuple[str, asyncio.Task, Optional[str]]:
         """Start a download job asynchronously. Returns job_id, task and platform.
 
@@ -603,14 +611,27 @@ class DownloadService:
         if not is_valid:
             raise ValueError(error)
 
+        # Reserve capacity before the first await so simultaneous submissions
+        # cannot overfill the queue while their database rows are being stored.
+        capacity = settings.max_concurrent_downloads + settings.max_queued_downloads
+        if len(self.active_jobs) >= capacity:
+            raise DownloadQueueFull("Download queue is full. Please try again later.")
+
         # Generate job ID
         job_id = job_id or str(uuid.uuid4())
 
         # Create progress tracker
         progress = DownloadProgress(job_id, progress_callback)
         progress.status = JobStatus.QUEUED
-        progress.current_stage = "Starting..."
+        progress.current_stage = "Waiting for a download slot..."
         self.active_jobs[job_id] = progress
+
+        try:
+            if on_enqueue:
+                await on_enqueue()
+        except BaseException:
+            self.active_jobs.pop(job_id, None)
+            raise
 
         # Register callback if provided
         if progress_callback:
@@ -618,19 +639,35 @@ class DownloadService:
 
         # Create async task
         loop = asyncio.get_running_loop()
+        ready = asyncio.Event()
+        self._waiting_jobs[job_id] = ready
 
         async def download_task():
             result: dict = {"success": False, "error": "Unknown error"}
             try:
+                await ready.wait()
+                if progress.cancelled:
+                    self._remember_completed(progress)
+                    result = {"success": False, "error": "Cancelled by user", "cancelled": True}
+                    return result
+
+                worker_started = asyncio.Event()
+
+                def run_download():
+                    loop.call_soon_threadsafe(worker_started.set)
+                    if progress.cancelled:
+                        return {"success": False, "error": "Cancelled by user"}
+                    progress.started_at = utcnow()
+                    progress.status = JobStatus.VALIDATING
+                    progress.current_stage = "Starting..."
+                    progress._notify()
+                    return self._run_download(url, job_id, quality, progress)
+
                 # Run blocking download in thread pool
-                future = loop.run_in_executor(
-                    executor,
-                    self._run_download,
-                    url,
-                    job_id,
-                    quality,
-                    progress,
-                )
+                future = loop.run_in_executor(executor, run_download)
+                # Previews also use this pool. Its wait must not consume the
+                # download timeout or mark the job as already started.
+                await worker_started.wait()
                 try:
                     result = await asyncio.wait_for(
                         asyncio.shield(future),
@@ -687,8 +724,11 @@ class DownloadService:
             finally:
                 # Clean up
                 progress._stop_interpolation()
+                self._waiting_jobs.pop(job_id, None)
+                self._running_jobs.discard(job_id)
                 self.active_jobs.pop(job_id, None)
                 self.progress_callbacks.pop(job_id, None)
+                self._dispatch_queued()
                 if on_finish:
                     try:
                         await on_finish(progress, result)
@@ -696,7 +736,16 @@ class DownloadService:
                         logger.exception("Failed to persist job %s", job_id)
 
         task = asyncio.create_task(download_task())
+        self._dispatch_queued()
         return job_id, task, platform
+
+    def _dispatch_queued(self) -> None:
+        """Wake waiting jobs in insertion order when execution slots open."""
+        while self._waiting_jobs and len(self._running_jobs) < settings.max_concurrent_downloads:
+            job_id = next(iter(self._waiting_jobs))
+            ready = self._waiting_jobs.pop(job_id)
+            self._running_jobs.add(job_id)
+            ready.set()
 
     def get_job_progress(self, job_id: str) -> Optional[DownloadProgress]:
         """Get current progress for a job"""
@@ -712,6 +761,13 @@ class DownloadService:
             progress.cancel_event.set()
             progress.status = JobStatus.CANCELLED
             progress.error_message = "Cancelled by user"
+            ready = self._waiting_jobs.pop(job_id, None)
+            if ready is not None:
+                # Queued jobs have no worker to stop. Wake their task to persist
+                # cancellation and release queue capacity immediately.
+                self.active_jobs.pop(job_id, None)
+                self._remember_completed(progress)
+                ready.set()
             progress._notify()
             return True
         return False
@@ -719,7 +775,12 @@ class DownloadService:
     @property
     def active_count(self) -> int:
         """Get count of active downloads"""
-        return len(self.active_jobs)
+        return len(self._running_jobs)
+
+    @property
+    def queued_count(self) -> int:
+        """Get count of jobs waiting for an execution slot."""
+        return len(self._waiting_jobs)
 
 
 # Singleton instance
