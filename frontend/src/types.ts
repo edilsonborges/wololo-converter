@@ -45,6 +45,20 @@ export interface DownloadStartResponse {
   status: JobStatus;
 }
 
+/** Job record returned by GET /api/jobs/{id} (fields used by the client) */
+export interface JobResponse {
+  id: string;
+  url: string;
+  status: JobStatus;
+  progress: number;
+  speed?: string | null;
+  eta?: string | null;
+  current_stage?: string | null;
+  title?: string | null;
+  filename?: string | null;
+  error_message?: string | null;
+}
+
 export interface JobProgressUpdate {
   job_id: string;
   status: JobStatus;

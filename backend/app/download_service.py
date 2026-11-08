@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Awaitable, Dict, Optional, Callable, Any
 import yt_dlp
 from concurrent.futures import ThreadPoolExecutor
+from yt_dlp.postprocessor import PostProcessor
 
 from .config import settings
 from .models import JobStatus, OutputFormat, VideoQuality, DownloadJob, utcnow
@@ -71,6 +72,45 @@ def _has_valid_cookies_file() -> bool:
         return False
 
 
+LIVE_ON_AIR = "This live stream is still on air. Try again after it ends."
+LIVE_NOT_STARTED = "This live stream or premiere hasn't started yet."
+LIVE_NOT_READY = (
+    "This live stream's recording isn't available yet (it may still be on air or "
+    "being processed by YouTube). Try again later."
+)
+
+
+def live_unavailable_reason(info: dict) -> Optional[str]:
+    """Why a live stream can't be downloaded yet, or None.
+
+    Ended streams (live_status 'was_live') download like any video; one still on
+    air would be recorded indefinitely, so it is refused.
+    """
+    status = info.get("live_status")
+    if status == "is_live" or (status is None and info.get("is_live")):
+        return LIVE_ON_AIR
+    if status == "is_upcoming":
+        return LIVE_NOT_STARTED
+    if status == "post_live" and not info.get("formats") and not info.get("url"):
+        return LIVE_NOT_READY
+    return None
+
+
+def friendly_live_error(message: str) -> Optional[str]:
+    """Map yt-dlp's live stream errors to the messages shown to users."""
+    lowered = message.lower()
+    if "live stream recording is not available" in lowered:
+        return LIVE_NOT_READY
+    if "live event will begin" in lowered or "premieres in" in lowered:
+        return LIVE_NOT_STARTED
+    return None
+
+
+def _skip_unfinished_live(info: dict, *, incomplete: bool = False) -> Optional[str]:
+    """yt-dlp match_filter: skip (don't record) streams that haven't ended."""
+    return live_unavailable_reason(info)
+
+
 def _apply_cookie_options(opts: dict) -> dict:
     """Add cookie options for platforms that require authentication."""
     if _has_valid_cookies_file():
@@ -109,6 +149,9 @@ class DownloadProgress:
         self.cancel_event = threading.Event()
         self.timed_out = False
         self.started_at: Optional[datetime] = None
+        # Streams yt-dlp downloads separately (video, then audio), captured
+        # right before the download starts; progress hooks only see one at a time
+        self.requested_formats: list[dict] = []
 
     @property
     def cancelled(self) -> bool:
@@ -195,6 +238,7 @@ class DownloadProgress:
                 if total_frags > 0:
                     raw_progress = (fragment / total_frags) * 100
 
+            raw_progress = self._overall_stream_progress(d.get("info_dict") or {}, raw_progress)
             self.progress = raw_progress * self.DOWNLOAD_MAX / 100
 
             # Extract speed and ETA
@@ -215,6 +259,10 @@ class DownloadProgress:
                 self._notify()
 
         elif status == "finished":
+            stream, count = self._stream_position(d.get("info_dict") or {})
+            if stream is not None and stream < count - 1:
+                # Video finished, audio still to come: keep the bar where it is
+                return
             self.current_stage = "Download complete, preparing conversion..."
             self.progress = self.DOWNLOAD_MAX  # 70%
             self._notify()
@@ -223,6 +271,30 @@ class DownloadProgress:
             self.status = JobStatus.FAILED
             self.error_message = str(d.get("error", "Download error"))
             self._notify()
+
+    def _stream_position(self, info: dict) -> tuple[Optional[int], int]:
+        """(index, count) of the stream being downloaded when yt-dlp fetches
+        video and audio separately; (None, 1) for a single stream."""
+        formats = self.requested_formats or info.get("requested_formats") or []
+        if len(formats) < 2:
+            return None, 1
+        ids = [f.get("format_id") for f in formats]
+        if info.get("format_id") not in ids:
+            return None, len(formats)
+        return ids.index(info.get("format_id")), len(formats)
+
+    def _overall_stream_progress(self, info: dict, stream_progress: float) -> float:
+        """Combine per-stream progress (video, then audio) into one 0-100 bar,
+        weighted by stream size, so the bar doesn't jump back to 0% when the
+        audio stream starts."""
+        index, count = self._stream_position(info)
+        if index is None:
+            return stream_progress
+        formats = self.requested_formats or info["requested_formats"]
+        sizes = [f.get("filesize") or f.get("filesize_approx") or 0 for f in formats]
+        weights = sizes if all(sizes) else [1] * count
+        done_before = sum(weights[:index])
+        return (done_before + weights[index] * stream_progress / 100) / sum(weights) * 100
 
     def postprocessor_hook(self, d: dict):
         """yt-dlp postprocessor hook — conversion phase maps to 70-95%"""
@@ -270,6 +342,19 @@ class DownloadProgress:
             self.current_stage = "Finalizing..."
             self.progress = self.CONVERSION_MAX  # 95%
             self._notify()
+
+
+class _CaptureRequestedFormats(PostProcessor):
+    """Runs right before the download and records which streams (video,
+    audio) will be fetched, so progress can be combined into one bar."""
+
+    def __init__(self, progress: "DownloadProgress"):
+        super().__init__()
+        self._progress = progress
+
+    def run(self, info):
+        self._progress.requested_formats = list(info.get("requested_formats") or [])
+        return [], info
 
 
 class DownloadService:
@@ -345,6 +430,8 @@ class DownloadService:
             "external_downloader": None,
             # Restrict to HTTPS
             "prefer_insecure": False,
+            # Ended live streams download normally; never record one on air
+            "match_filter": _skip_unfinished_live,
         }
 
         _apply_cookie_options(opts)
@@ -535,6 +622,7 @@ class DownloadService:
 
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
+                ydl.add_post_processor(_CaptureRequestedFormats(progress), when="before_dl")
                 progress.status = JobStatus.VALIDATING
                 progress.current_stage = "Extracting video info..."
                 progress._notify()
@@ -544,6 +632,10 @@ class DownloadService:
                 # progress hook's info_dict as soon as the download starts.
                 info = ydl.extract_info(url, download=True) or {}
                 progress.title = info.get("title") or progress.title or "Unknown"
+
+                live_reason = live_unavailable_reason(info)
+                if live_reason:
+                    return {"success": False, "error": live_reason}
 
                 output_file = self._find_output_file(job_id, info)
 
@@ -570,6 +662,8 @@ class DownloadService:
                 error_msg = "This video is age-restricted"
             elif "copyright" in error_msg.lower():
                 error_msg = "This video is blocked due to copyright"
+            elif friendly_live_error(error_msg):
+                error_msg = friendly_live_error(error_msg)
             return {"success": False, "error": error_msg}
 
         except Exception as e:
@@ -812,10 +906,16 @@ def extract_video_preview(url: str) -> dict:
             raise ValueError("This video is private and cannot be accessed")
         elif "Video unavailable" in error_msg:
             raise ValueError("This video is unavailable")
+        elif friendly_live_error(error_msg):
+            raise ValueError(friendly_live_error(error_msg))
         raise ValueError(f"Could not fetch video info: {error_msg}")
 
     if not info:
         raise ValueError("Could not fetch video info")
+
+    live_reason = live_unavailable_reason(info)
+    if live_reason:
+        raise ValueError(live_reason)
 
     # Parse available resolutions from formats
     # Use min(width, height) for portrait videos (e.g. Instagram Reels)

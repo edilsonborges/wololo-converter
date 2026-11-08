@@ -499,6 +499,9 @@ class TestSingleExtractCall:
             def __exit__(self, *args):
                 return False
 
+            def add_post_processor(self, pp, when=None):
+                calls.append(("add_post_processor", when))
+
             def extract_info(self, url, download=False):
                 calls.append(("extract_info", download))
                 job_dir = tmp_path / "job"
@@ -521,7 +524,7 @@ class TestSingleExtractCall:
             "https://www.youtube.com/watch?v=test123", "job", VideoQuality.Q_720P, DownloadProgress("job")
         )
 
-        assert calls == [("extract_info", True)]
+        assert calls == [("add_post_processor", "before_dl"), ("extract_info", True)]
         assert result["success"] is True
         assert result["filename"] == "Clip.mp4"
         assert result["title"] == "Clip"
@@ -647,3 +650,138 @@ class TestDownloadTimeout:
         assert finished == [(JobStatus.FAILED, "Download timed out after 1 seconds")]
         assert job_id not in service.active_jobs
         assert not (tmp_path / job_id).exists()
+
+
+class TestLiveStreams:
+    def test_live_unavailable_reason(self):
+        reason = download_service_module.live_unavailable_reason
+        assert reason({"live_status": "was_live"}) is None
+        assert reason({"live_status": "not_live"}) is None
+        assert reason({}) is None
+        assert reason({"live_status": "is_live"}) == download_service_module.LIVE_ON_AIR
+        assert reason({"is_live": True}) == download_service_module.LIVE_ON_AIR
+        assert reason({"live_status": "is_upcoming"}) == download_service_module.LIVE_NOT_STARTED
+        # Ended but still being processed: no formats yet
+        assert reason({"live_status": "post_live", "formats": []}) == download_service_module.LIVE_NOT_READY
+        assert reason({"live_status": "post_live", "formats": [{"format_id": "1"}]}) is None
+
+    def test_friendly_live_errors(self):
+        friendly = download_service_module.friendly_live_error
+        assert friendly("ERROR: [youtube] x: This live stream recording is not available.") == (
+            download_service_module.LIVE_NOT_READY
+        )
+        assert friendly("ERROR: [youtube] x: This live event will begin in 3 hours.") == (
+            download_service_module.LIVE_NOT_STARTED
+        )
+        assert friendly("ERROR: Private video") is None
+
+    def test_options_never_record_a_stream_on_air(self):
+        opts = DownloadService().get_yt_dlp_options(
+            "job", VideoQuality.Q_480P, DownloadProgress("job"), "https://www.youtube.com/live/abc123"
+        )
+        assert opts["match_filter"]({"live_status": "is_live"}) is not None
+        assert opts["match_filter"]({"live_status": "was_live"}) is None
+
+    def test_run_download_reports_stream_on_air(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(download_service_module.settings, "temp_dir", tmp_path)
+
+        class FakeYDL:
+            def __init__(self, opts):
+                self.opts = opts
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def add_post_processor(self, pp, when=None):
+                pass
+
+            def extract_info(self, url, download=False):
+                # match_filter skipped the download; yt-dlp still returns the info
+                return {"title": "Live now", "live_status": "is_live"}
+
+        monkeypatch.setattr(download_service_module.yt_dlp, "YoutubeDL", FakeYDL)
+
+        result = DownloadService()._run_download(
+            "https://www.youtube.com/live/abc123", "job", VideoQuality.Q_480P, DownloadProgress("job")
+        )
+
+        assert result == {"success": False, "error": download_service_module.LIVE_ON_AIR}
+
+    def test_preview_rejects_stream_on_air(self, monkeypatch):
+        import pytest
+
+        class FakeYDL:
+            def __init__(self, opts):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def extract_info(self, url, download=False):
+                return {"title": "Soon", "live_status": "is_upcoming", "formats": []}
+
+        monkeypatch.setattr(download_service_module.yt_dlp, "YoutubeDL", FakeYDL)
+
+        with pytest.raises(ValueError, match="hasn't started"):
+            download_service_module.extract_video_preview("https://www.youtube.com/live/abc123")
+
+
+class TestSeparateStreamsProgress:
+    FORMATS = [
+        {"format_id": "137", "filesize": 300},
+        {"format_id": "140", "filesize": 100},
+    ]
+
+    def _hook(self, progress, format_id, downloaded, total=100, status="downloading"):
+        progress.progress_hook({
+            "status": status,
+            "downloaded_bytes": downloaded,
+            "total_bytes": total,
+            "info_dict": {"format_id": format_id, "requested_formats": self.FORMATS},
+        })
+
+    def test_bar_does_not_jump_back_when_audio_starts(self):
+        progress = DownloadProgress("job")
+        self._hook(progress, "137", 100, status="downloading")  # video done
+        after_video = progress.progress
+        self._hook(progress, "137", 100, status="finished")
+        assert progress.progress == after_video  # not forced to 70% yet
+        self._hook(progress, "140", 10)  # audio starts
+        assert progress.progress >= after_video
+        # video is 3/4 of the bytes: 75% of the download phase
+        assert round(after_video, 1) == round(0.75 * DownloadProgress.DOWNLOAD_MAX, 1)
+
+    def test_last_stream_finishing_reaches_download_max(self):
+        progress = DownloadProgress("job")
+        self._hook(progress, "140", 100, status="finished")
+        assert progress.progress == DownloadProgress.DOWNLOAD_MAX
+
+    def test_equal_weights_when_sizes_unknown(self):
+        progress = DownloadProgress("job")
+        progress.progress_hook({
+            "status": "downloading",
+            "downloaded_bytes": 50,
+            "total_bytes": 100,
+            "info_dict": {"format_id": "b", "requested_formats": [{"format_id": "a"}, {"format_id": "b"}]},
+        })
+        assert progress.progress == 0.75 * DownloadProgress.DOWNLOAD_MAX
+
+    def test_captured_formats_drive_progress_when_hook_lacks_them(self):
+        progress = DownloadProgress("job")
+        pp = download_service_module._CaptureRequestedFormats(progress)
+        pp.run({"format_id": "137+140", "requested_formats": self.FORMATS})
+        # What yt-dlp really sends to hooks: only the current stream's format_id
+        progress.progress_hook({"status": "downloading", "downloaded_bytes": 100, "total_bytes": 100,
+                                "info_dict": {"format_id": "137"}})
+        after_video = progress.progress
+        progress.progress_hook({"status": "downloading", "downloaded_bytes": 1, "total_bytes": 100,
+                                "info_dict": {"format_id": "140"}})
+        assert progress.progress >= after_video
+        assert round(after_video, 1) == round(0.75 * DownloadProgress.DOWNLOAD_MAX, 1)
+

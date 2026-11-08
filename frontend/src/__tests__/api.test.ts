@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { api, ApiError } from '../api'
 
 describe('api', () => {
@@ -114,6 +114,120 @@ describe('api', () => {
 
       cleanup()
       expect(mockClose).toHaveBeenCalled()
+    })
+  })
+
+  describe('subscribeToProgress fallback when the live connection drops', () => {
+    type Listener = (event: { data: string }) => void
+
+    let listeners: Record<string, Listener>
+    let closeSpy: ReturnType<typeof vi.fn>
+
+    beforeEach(() => {
+      listeners = {}
+      closeSpy = vi.fn()
+      class MockEventSource {
+        close = closeSpy
+        constructor(public url: string) {}
+        addEventListener(name: string, fn: Listener) {
+          listeners[name] = fn
+        }
+      }
+      globalThis.EventSource = MockEventSource as any
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+      vi.restoreAllMocks()
+    })
+
+    const job = (status: string, extra = {}) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'j1', url: 'u', status, progress: status === 'completed' ? 100 : 40, ...extra }),
+    })
+
+    it('polls the job after the stream drops and completes when the server finishes', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(job('converting', { current_stage: 'Extracting audio...' }))
+        .mockResolvedValueOnce(job('completed', { title: 'Live replay' }))
+      globalThis.fetch = fetchMock as any
+      const onProgress = vi.fn()
+      const onComplete = vi.fn()
+      const onError = vi.fn()
+
+      api.subscribeToProgress('j1', { onProgress, onComplete, onError }, { pollIntervalMs: 5 })
+      listeners.error({ data: '' })
+
+      await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce())
+      expect(fetchMock).toHaveBeenCalledWith('/api/jobs/j1')
+      expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ status: 'converting', progress: 40 }))
+      expect(onComplete).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'completed', download_ready: true, title: 'Live replay' }),
+      )
+      expect(onError).not.toHaveBeenCalled()
+    })
+
+    it('keeps polling through temporary network errors', async () => {
+      const fetchMock = vi.fn()
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce(job('completed'))
+      globalThis.fetch = fetchMock as any
+      const onComplete = vi.fn()
+      const onError = vi.fn()
+
+      api.subscribeToProgress('j1', { onProgress: vi.fn(), onComplete, onError }, { pollIntervalMs: 5 })
+      listeners.error({ data: '' })
+
+      await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce())
+      expect(onError).not.toHaveBeenCalled()
+    })
+
+    it('gives up after too many consecutive failures', async () => {
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error('offline')) as any
+      const onError = vi.fn()
+
+      api.subscribeToProgress('j1', { onProgress: vi.fn(), onComplete: vi.fn(), onError }, { pollIntervalMs: 1, maxPollFailures: 3 })
+      listeners.error({ data: '' })
+
+      await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(new Error('Connection lost')))
+    })
+
+    it('reports a job the server no longer knows', async () => {
+      globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404 }) as any
+      const onError = vi.fn()
+
+      api.subscribeToProgress('j1', { onProgress: vi.fn(), onComplete: vi.fn(), onError }, { pollIntervalMs: 1 })
+      listeners.error({ data: '' })
+
+      await vi.waitFor(() => expect(onError).toHaveBeenCalledWith(new Error('Job not found')))
+    })
+
+    it('stops polling after cleanup', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(job('downloading'))
+      globalThis.fetch = fetchMock as any
+
+      const cleanup = api.subscribeToProgress('j1', { onProgress: vi.fn(), onComplete: vi.fn(), onError: vi.fn() }, { pollIntervalMs: 5 })
+      listeners.error({ data: '' })
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
+      cleanup()
+      const calls = fetchMock.mock.calls.length
+      await new Promise((r) => setTimeout(r, 30))
+      expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(calls + 1)
+    })
+
+    it('a complete event over SSE still finishes without polling', () => {
+      const fetchMock = vi.fn()
+      globalThis.fetch = fetchMock as any
+      const onComplete = vi.fn()
+
+      api.subscribeToProgress('j1', { onProgress: vi.fn(), onComplete, onError: vi.fn() })
+      listeners.complete({ data: JSON.stringify({ job_id: 'j1', status: 'completed', progress: 100, download_ready: true }) })
+
+      expect(onComplete).toHaveBeenCalledOnce()
+      expect(fetchMock).not.toHaveBeenCalled()
+      expect(closeSpy).toHaveBeenCalled()
     })
   })
 })

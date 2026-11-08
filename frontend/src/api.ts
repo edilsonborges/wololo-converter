@@ -6,9 +6,28 @@ import type {
   JobProgressUpdate,
   PreviewResponse,
   ResolveResponse,
+  JobResponse,
+  JobStatus,
 } from './types';
 
 const API_BASE = '/api';
+
+const TERMINAL_STATUSES: JobStatus[] = ['completed', 'failed', 'cancelled'];
+
+/** Map the job record returned by GET /api/jobs/{id} to a progress update. */
+export function jobToProgressUpdate(job: JobResponse): JobProgressUpdate {
+  return {
+    job_id: job.id,
+    status: job.status,
+    progress: job.progress ?? 0,
+    speed: job.speed ?? undefined,
+    eta: job.eta ?? undefined,
+    current_stage: job.current_stage ?? undefined,
+    title: job.title ?? undefined,
+    error_message: job.error_message ?? undefined,
+    download_ready: job.status === 'completed',
+  };
+}
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -133,14 +152,71 @@ export const api = {
       onProgress: (update: JobProgressUpdate) => void;
       onComplete: (update: JobProgressUpdate) => void;
       onError: (error: Error) => void;
-    }
+    },
+    options: { pollIntervalMs?: number; maxPollFailures?: number } = {}
   ): () => void {
+    // Live updates come over SSE. Long jobs (e.g. a 2 h live replay) outlast
+    // that connection: mobile browsers drop it when the tab is in the
+    // background and proxies close it. The job keeps running on the server, so
+    // when the stream drops we poll the job's status instead of failing.
+    const pollIntervalMs = options.pollIntervalMs ?? 2000;
+    const maxPollFailures = options.maxPollFailures ?? 300; // ~10 min offline
+    let stopped = false;
+    let polling = false;
+    let pollTimer: ReturnType<typeof setTimeout> | undefined;
+    let pollFailures = 0;
+
     const eventSource = new EventSource(`${API_BASE}/jobs/${jobId}/progress`);
+
+    const stop = () => {
+      stopped = true;
+      eventSource.close();
+      if (pollTimer) clearTimeout(pollTimer);
+    };
+
+    const finish = (update: JobProgressUpdate) => {
+      if (stopped) return;
+      stop();
+      callbacks.onComplete(update);
+    };
+
+    const fail = (error: Error) => {
+      if (stopped) return;
+      stop();
+      callbacks.onError(error);
+    };
+
+    const poll = async () => {
+      if (stopped) return;
+      try {
+        const response = await fetch(`${API_BASE}/jobs/${jobId}`);
+        if (response.status === 404) {
+          fail(new Error('Job not found'));
+          return;
+        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const job = (await response.json()) as JobResponse;
+        pollFailures = 0;
+        const update = jobToProgressUpdate(job);
+        if (TERMINAL_STATUSES.includes(job.status)) {
+          finish(update);
+          return;
+        }
+        if (!stopped) callbacks.onProgress(update);
+      } catch {
+        pollFailures += 1;
+        if (pollFailures >= maxPollFailures) {
+          fail(new Error('Connection lost'));
+          return;
+        }
+      }
+      if (!stopped) pollTimer = setTimeout(poll, pollIntervalMs);
+    };
 
     eventSource.addEventListener('progress', (event) => {
       try {
-        const update = JSON.parse(event.data) as JobProgressUpdate;
-        callbacks.onProgress(update);
+        const update = JSON.parse((event as MessageEvent).data) as JobProgressUpdate;
+        if (!stopped) callbacks.onProgress(update);
       } catch (e) {
         console.error('Failed to parse progress event:', e);
       }
@@ -148,23 +224,22 @@ export const api = {
 
     eventSource.addEventListener('complete', (event) => {
       try {
-        const update = JSON.parse(event.data) as JobProgressUpdate;
-        callbacks.onComplete(update);
+        finish(JSON.parse((event as MessageEvent).data) as JobProgressUpdate);
       } catch (e) {
         console.error('Failed to parse complete event:', e);
+        stop();
       }
-      eventSource.close();
     });
 
     eventSource.addEventListener('error', () => {
-      callbacks.onError(new Error('Connection lost'));
       eventSource.close();
+      if (stopped || polling) return;
+      polling = true;
+      poll();
     });
 
     // Return cleanup function
-    return () => {
-      eventSource.close();
-    };
+    return stop;
   },
 };
 

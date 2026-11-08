@@ -79,7 +79,7 @@ async def persist_job_result(progress: DownloadProgress, result: dict) -> None:
             title=result.get("title") or progress.title,
             filename=result.get("filename"),
             file_size=result.get("file_size"),
-            duration=result.get("duration"),
+            duration=round(result["duration"]) if result.get("duration") is not None else None,
             thumbnail_url=result.get("thumbnail_url"),
         )
 

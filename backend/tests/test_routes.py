@@ -243,3 +243,20 @@ class TestJobPersistenceAndFiles:
         job = await db_session.get(DownloadJob, "queued-job")
         await db_session.refresh(job)
         assert job.status == JobStatus.CANCELLED.value
+
+
+class TestDurationsAndRestart:
+    async def test_list_jobs_tolerates_fractional_durations(self, client, db_session):
+        from datetime import datetime
+        from app.models import DownloadJob
+
+        db_session.add(DownloadJob(
+            id="frac", url="https://x.com/u/status/1", platform="twitter", output_format="video",
+            quality="720p", status="completed", duration=26.391, created_at=datetime(2026, 1, 1),
+        ))
+        await db_session.commit()
+
+        response = await client.get("/api/jobs")
+
+        assert response.status_code == 200
+        assert response.json()[0]["duration"] == 26

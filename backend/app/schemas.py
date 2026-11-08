@@ -97,6 +97,12 @@ class JobResponse(BaseModel):
     class Config:
         from_attributes = True
 
+    @field_validator("duration", mode="before")
+    @classmethod
+    def round_duration(cls, v):
+        """Older rows stored fractional seconds (e.g. 26.391)"""
+        return round(v) if isinstance(v, float) else v
+
 
 class JobProgressUpdate(BaseModel):
     """WebSocket/SSE message for progress updates"""

@@ -127,4 +127,30 @@ test.describe('Wololo Converter App', () => {
     await expect(page.getByText('No matching video found on YouTube')).toBeVisible()
     await expect(page.getByTitle('Retry')).toBeVisible()
   })
+
+  test('should finish a download even when the live progress connection drops', async ({ page }) => {
+    let polls = 0
+    await page.route('**/api/preview', (route) => route.fulfill({ status: 400, json: { detail: 'skip' } }))
+    await page.route('**/api/download', (route) =>
+      route.fulfill({ json: { job_id: 'job-1', message: 'Download started', status: 'queued' } }),
+    )
+    await page.route('**/api/jobs/job-1/progress', (route) => route.abort())
+    await page.route('**/api/jobs/job-1', (route) => {
+      polls += 1
+      const done = polls >= 2
+      return route.fulfill({
+        json: {
+          id: 'job-1', url: 'https://youtu.be/abc', status: done ? 'completed' : 'converting',
+          progress: done ? 100 : 80, title: 'Live replay',
+        },
+      })
+    })
+
+    await page.locator('textarea').fill('https://www.youtube.com/live/abcdefghijk')
+    await page.locator('button', { hasText: /Add 1 URL/ }).click()
+
+    await expect(page.getByText('Completed', { exact: true }).first()).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText('Live replay')).toBeVisible()
+    await expect(page.getByText('Connection lost')).toHaveCount(0)
+  })
 })

@@ -92,10 +92,10 @@ def extract_threads_info(url: str) -> dict:
         thumbnail_url = og.group(1)
 
     # --- duration ---
-    duration: Optional[float] = None
+    duration: Optional[int] = None
     dm = re.search(r'"video_duration":([\d.]+)', text)
     if dm:
-        duration = float(dm.group(1))
+        duration = round(float(dm.group(1)))
 
     return {
         "title": title,

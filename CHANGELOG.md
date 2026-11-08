@@ -3,6 +3,25 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] - 2026-11-08
+
+### Added
+
+- Download ended YouTube live streams (`youtube.com/live/...` links), including
+  replays several hours long, as video or MP3.
+- Clear messages for live streams that can't be downloaded yet: still on air,
+  not started, or still being processed by YouTube. A stream on air is never
+  recorded indefinitely.
+
+### Fixed
+
+- Long downloads no longer fail with "Connection lost" when the live progress
+  connection drops (e.g. the iPhone tab goes to the background): the page keeps
+  checking the job until the server finishes.
+- The progress bar no longer jumps back when YouTube video and audio are
+  downloaded separately; both count toward one bar.
+- `GET /api/jobs` no longer fails when a job stored a fractional duration.
+
 ## [0.9.2] - 2026-11-08
 
 ### Changed
