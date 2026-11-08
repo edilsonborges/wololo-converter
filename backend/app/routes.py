@@ -1,6 +1,7 @@
 """API routes for Wololo Converter"""
 import asyncio
 import json
+import logging
 import uuid
 from pathlib import Path
 from typing import Dict
@@ -26,7 +27,10 @@ from .schemas import (
     JobProgressUpdate,
     PreviewRequest,
     PreviewResponse,
+    ResolveRequest,
+    ResolveResponse,
 )
+from . import music_links
 from .download_service import (
     TEMP_SUFFIXES,
     DownloadProgress,
@@ -38,6 +42,8 @@ from .download_service import (
 from .utils import validate_url, get_directory_size, format_file_size
 from .version import APP_VERSION
 
+
+logger = logging.getLogger(__name__)
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -148,6 +154,29 @@ async def preview_video(request: Request, preview_request: PreviewRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch video info: {str(e)}")
+
+
+@router.post("/resolve", response_model=ResolveResponse)
+@limiter.limit("10/minute")
+async def resolve_music_link(request: Request, resolve_request: ResolveRequest):
+    """Resolve a music page link into the matching YouTube video of each track"""
+    url = resolve_request.url.strip()
+    if not music_links.is_music_link(url):
+        raise HTTPException(status_code=400, detail="Unsupported link")
+
+    loop = asyncio.get_running_loop()
+    try:
+        return await asyncio.wait_for(
+            loop.run_in_executor(music_links.browser_executor, music_links.resolve, url),
+            timeout=180,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Timed out reading the music page")
+    except Exception as e:
+        logger.exception("Failed to resolve %s", url)
+        raise HTTPException(status_code=502, detail=f"Could not read the music page: {e}")
 
 
 @router.post(

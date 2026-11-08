@@ -4,7 +4,7 @@ import { getReleases } from './changelog';
 import { useQueueManager } from './hooks/useQueueManager';
 import { api } from './api';
 import type { VideoQuality, PreviewResponse } from './types';
-import { parseAutoDownloadRoute } from './urlParser';
+import { parseAutoDownloadRoute, MUSIC_PLATFORM } from './urlParser';
 import packageJson from '../package.json';
 
 function App() {
@@ -29,6 +29,7 @@ function App() {
     config,
     setConfig,
     addToQueue,
+    addMusicLinks,
     removeItem,
     reorderItems,
     cancelItem,
@@ -48,9 +49,13 @@ function App() {
     const parsed = parseAutoDownloadRoute(window.location);
     if (!parsed) return;
 
-    addToQueue([parsed], '480p', { autoDownload: true });
+    if (parsed.platform === MUSIC_PLATFORM) {
+      addMusicLinks([parsed.url], { autoDownload: true });
+    } else {
+      addToQueue([parsed], '480p', { autoDownload: true });
+    }
     window.history.replaceState({}, '', '/');
-  }, [addToQueue]);
+  }, [addToQueue, addMusicLinks]);
 
   const handleUrlsChange = useCallback((urls: ParsedURL[]) => {
     setParsedUrls(urls);
@@ -77,8 +82,9 @@ function App() {
     const url = validUrls[0].url;
     const platform = validUrls[0].platform;
 
-    // Skip preview for Instagram/Threads (not needed, slows down UX)
-    if (platform === 'instagram' || platform === 'threads') {
+    // Skip preview for Instagram/Threads (not needed, slows down UX) and for
+    // music links (resolved to YouTube videos when added to the queue)
+    if (platform === 'instagram' || platform === 'threads' || platform === MUSIC_PLATFORM) {
       setPreview(null);
       setPreviewLoading(false);
       setPreviewError(null);
@@ -123,7 +129,9 @@ function App() {
     const validUrls = parsedUrls.filter((u) => u.isValid);
     if (validUrls.length === 0) return;
 
-    const added = addToQueue(parsedUrls, selectedQuality);
+    const musicUrls = validUrls.filter((u) => u.platform === MUSIC_PLATFORM).map((u) => u.url);
+    const otherUrls = parsedUrls.filter((u) => u.platform !== MUSIC_PLATFORM);
+    const added = addToQueue(otherUrls, selectedQuality) + addMusicLinks(musicUrls);
     if (added > 0) {
       // Clear the input and preview after adding to queue
       setParsedUrls([]);
@@ -132,10 +140,12 @@ function App() {
       lastPreviewUrlRef.current = null;
       setResetTrigger((prev) => prev + 1);
     }
-  }, [parsedUrls, addToQueue, selectedQuality]);
+  }, [parsedUrls, addToQueue, addMusicLinks, selectedQuality]);
 
   const validUrlCount = parsedUrls.filter((u) => u.isValid).length;
   const canAddToQueue = validUrlCount > 0;
+  // Music links are always downloaded as MP3, so no quality choice for them
+  const hasVideoUrls = parsedUrls.some((u) => u.isValid && u.platform !== MUSIC_PLATFORM);
   const isSingleUrl = validUrlCount === 1;
 
   return (
@@ -183,7 +193,7 @@ function App() {
             )}
 
             {/* Quality Selector - only when there's a valid URL */}
-            {canAddToQueue && (
+            {hasVideoUrls && (
               <QualitySelector
                 selectedQuality={selectedQuality}
                 onQualityChange={setSelectedQuality}

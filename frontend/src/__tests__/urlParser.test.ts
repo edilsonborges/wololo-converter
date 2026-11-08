@@ -112,3 +112,26 @@ describe('parseAutoDownloadRoute', () => {
     expect(parseAutoDownloadRoute(route('/example.com/video'))).toBeNull();
   });
 });
+
+describe('music page links', () => {
+  it('accepts album and song links without listing them as a platform', async () => {
+    const { parseURLs, MUSIC_PLATFORM } = await import('../urlParser');
+    const { PLATFORMS } = await import('../types');
+    const [song, album] = parseURLs(
+      'https://artlist.io/royalty-free-music/song/earthquake/6002056?ref=x\nhttps://artlist.io/royalty-free-music/album/dale-candela/1000047',
+    );
+    expect(song).toMatchObject({
+      isValid: true,
+      platform: MUSIC_PLATFORM,
+      platformInfo: null,
+      url: 'https://artlist.io/royalty-free-music/song/earthquake/6002056',
+    });
+    expect(album.isValid).toBe(true);
+    expect(Object.keys(PLATFORMS)).not.toContain(MUSIC_PLATFORM);
+  });
+
+  it('rejects other pages of the same site', async () => {
+    const { parseURLs } = await import('../urlParser');
+    expect(parseURLs('https://artlist.io/royalty-free-music/artist/djnoone/2901')[0].isValid).toBe(false);
+  });
+});

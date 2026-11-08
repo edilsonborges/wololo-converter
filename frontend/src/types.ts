@@ -3,6 +3,20 @@ import type { IconName } from './components/Icon';
 // API Types
 export type VideoQuality = '360p' | '480p' | '720p' | '1080p' | 'mp3';
 
+export interface ResolvedTrack {
+  title: string;
+  artist: string;
+  duration?: number | null;
+  source_url?: string | null;
+  video_url?: string | null;
+  video_title?: string | null;
+}
+
+export interface ResolveResponse {
+  album: string;
+  tracks: ResolvedTrack[];
+}
+
 export interface PreviewResponse {
   title: string;
   thumbnail_url: string;
@@ -99,7 +113,7 @@ export const PLATFORMS: Record<string, PlatformInfo> = {
 };
 
 // Queue-related types
-export type QueueItemStatus = 'pending' | 'active' | 'completed' | 'failed' | 'cancelled';
+export type QueueItemStatus = 'resolving' | 'pending' | 'active' | 'completed' | 'failed' | 'cancelled';
 
 export type QueueProcessingMode = 'sequential' | 'parallel';
 
@@ -113,6 +127,10 @@ export interface QueueItem {
   progress?: JobProgressUpdate;
   error?: string;
   addedAt: number;
+  /** Display name known before the download starts (e.g. "Artist - Track") */
+  label?: string;
+  /** A music page link that is resolved to YouTube videos before downloading */
+  musicLink?: boolean;
   /** When processing actually started (the item left the pending state) */
   startedAt?: number;
   completedAt?: number;

@@ -132,3 +132,22 @@ class HealthResponse(BaseModel):
     yt_dlp_version: str
     active_downloads: int
     temp_dir_size_mb: float
+
+
+class ResolveRequest(BaseModel):
+    """Request to resolve a music page link into downloadable videos"""
+    url: str = Field(..., min_length=10, max_length=2048)
+
+
+class ResolvedTrack(BaseModel):
+    title: str
+    artist: str
+    duration: Optional[int] = None
+    source_url: Optional[str] = None
+    video_url: Optional[str] = None
+    video_title: Optional[str] = None
+
+
+class ResolveResponse(BaseModel):
+    album: str
+    tracks: list[ResolvedTrack]

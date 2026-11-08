@@ -20,6 +20,7 @@ interface QueueManagerProps {
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  resolving: { bg: 'bg-info-light', text: 'text-info-text', label: 'Finding tracks...' },
   pending: { bg: 'bg-surface-tertiary', text: 'text-text-secondary', label: 'Pending' },
   active: { bg: 'bg-info-light', text: 'text-info-text', label: 'Downloading' },
   completed: { bg: 'bg-success-light', text: 'text-success-text', label: 'Completed' },
@@ -56,7 +57,7 @@ export const QueueManager: FC<QueueManagerProps> = ({
   const dragNodeRef = useRef<HTMLDivElement | null>(null);
 
   const pendingItems = items.filter((i) => i.status === 'pending');
-  const activeItems = items.filter((i) => i.status === 'active');
+  const activeItems = items.filter((i) => i.status === 'active' || i.status === 'resolving');
   const completedItems = items.filter((i) => i.status === 'completed' || i.status === 'failed' || i.status === 'cancelled');
 
   const handleDragStart = useCallback((e: DragEvent<HTMLDivElement>, index: number) => {
@@ -172,16 +173,16 @@ export const QueueManager: FC<QueueManagerProps> = ({
                   {item.quality}
                 </span>
               )}
-              {item.progress?.title && (
+              {(item.progress?.title || item.label) && (
                 <span className="text-sm text-text-primary font-medium truncate">
-                  {item.progress.title}
+                  {item.progress?.title || item.label}
                 </span>
               )}
               {item.startedAt !== undefined && item.status !== 'pending' && (
                 <span className="ml-auto flex-shrink-0">
                   <ElapsedTime
                     startedAt={item.startedAt}
-                    endedAt={item.status === 'active' ? undefined : item.completedAt}
+                    endedAt={item.status === 'active' || item.status === 'resolving' ? undefined : item.completedAt}
                     label={item.status === 'completed' ? 'Took' : undefined}
                   />
                 </span>
@@ -263,7 +264,7 @@ export const QueueManager: FC<QueueManagerProps> = ({
             )}
 
             {/* Remove button for pending/cancelled/failed items */}
-            {(item.status === 'pending' || item.status === 'cancelled' || item.status === 'failed' || item.status === 'completed') && (
+            {(item.status === 'pending' || item.status === 'resolving' || item.status === 'cancelled' || item.status === 'failed' || item.status === 'completed') && (
               <button
                 onClick={() => onRemove(item.id)}
                 className="p-1.5 text-text-muted hover:text-error hover:bg-error-light rounded transition-colors"
@@ -370,7 +371,7 @@ export const QueueManager: FC<QueueManagerProps> = ({
           <div className="space-y-2">
             <h3 className="text-sm font-medium text-info-text">Active</h3>
             <div className="space-y-2">
-              {items.filter((i) => i.status === 'active').map((item) =>
+              {items.filter((i) => i.status === 'active' || i.status === 'resolving').map((item) =>
                 renderQueueItem(item, items.indexOf(item), false)
               )}
             </div>

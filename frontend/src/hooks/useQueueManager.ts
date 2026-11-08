@@ -58,6 +58,96 @@ export function useQueueManager() {
     return newItems.length;
   }, []);
 
+  // Resolve a music link item into one pending MP3 item per track found on
+  // YouTube (tracks without a match become failed items that can be retried)
+  const resolveMusicItem = useCallback(async (id: string, url: string, autoDownload?: boolean) => {
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? { ...item, status: 'resolving', error: undefined, startedAt: Date.now(), completedAt: undefined }
+          : item
+      )
+    );
+
+    try {
+      const result = await api.resolveMusicLink(url);
+      const now = Date.now();
+      const replacements: QueueItem[] = result.tracks.map((track) => {
+        const label = `${track.artist} - ${track.title}`;
+        return track.video_url
+          ? {
+              id: generateId(),
+              url: track.video_url,
+              platform: 'youtube',
+              quality: 'mp3' as VideoQuality,
+              status: 'pending' as QueueItemStatus,
+              addedAt: now,
+              label,
+              autoDownload,
+            }
+          : {
+              id: generateId(),
+              url: track.source_url || url,
+              platform: null,
+              quality: 'mp3' as VideoQuality,
+              status: 'failed' as QueueItemStatus,
+              addedAt: now,
+              completedAt: now,
+              label,
+              musicLink: true,
+              autoDownload,
+              error: 'No matching video found on YouTube',
+            };
+      });
+
+      setItems((prev) => {
+        const index = prev.findIndex((item) => item.id === id);
+        if (index === -1) return prev; // removed while resolving
+        if (replacements.length === 0) {
+          return prev.map((item) =>
+            item.id === id
+              ? { ...item, status: 'failed', error: 'No tracks found on this page', completedAt: Date.now() }
+              : item
+          );
+        }
+        return [...prev.slice(0, index), ...replacements, ...prev.slice(index + 1)];
+      });
+    } catch (err) {
+      setItems((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                status: 'failed',
+                error: err instanceof Error ? err.message : 'Could not read the music page',
+                completedAt: Date.now(),
+              }
+            : item
+        )
+      );
+    }
+  }, []);
+
+  // Add music page links (album or song); each is resolved to YouTube videos
+  const addMusicLinks = useCallback((urls: string[], options: AddToQueueOptions = {}) => {
+    const now = Date.now();
+    const newItems: QueueItem[] = urls.map((url) => ({
+      id: generateId(),
+      url,
+      platform: null,
+      quality: 'mp3' as VideoQuality,
+      status: 'resolving' as QueueItemStatus,
+      addedAt: now,
+      startedAt: now,
+      musicLink: true,
+      autoDownload: options.autoDownload,
+    }));
+
+    setItems((prev) => [...prev, ...newItems]);
+    newItems.forEach((item) => resolveMusicItem(item.id, item.url, item.autoDownload));
+    return newItems.length;
+  }, [resolveMusicItem]);
+
   // Update a single item
   const updateItem = useCallback((id: string, updates: Partial<QueueItem>) => {
     setItems((prev) =>
@@ -112,6 +202,11 @@ export function useQueueManager() {
 
   // Retry a failed item
   const retryItem = useCallback((id: string) => {
+    const item = items.find((i) => i.id === id);
+    if (item?.musicLink) {
+      resolveMusicItem(id, item.url, item.autoDownload);
+      return;
+    }
     updateItem(id, {
       status: 'pending',
       error: undefined,
@@ -120,7 +215,7 @@ export function useQueueManager() {
       startedAt: undefined,
       completedAt: undefined,
     });
-  }, [updateItem]);
+  }, [items, resolveMusicItem, updateItem]);
 
   // Clear completed/failed/cancelled items
   const clearCompleted = useCallback(() => {
@@ -303,6 +398,7 @@ export function useQueueManager() {
 
     // Actions
     addToQueue,
+    addMusicLinks,
     removeItem,
     reorderItems,
     cancelItem,

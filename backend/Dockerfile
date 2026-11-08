@@ -23,6 +23,10 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Headless Chromium (and its system libraries) for reading music pages
+RUN playwright install --with-deps --only-shell chromium \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy application code
 COPY app/ ./app/
 

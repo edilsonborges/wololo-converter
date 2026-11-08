@@ -32,7 +32,14 @@ const PLATFORM_PATTERNS: Record<string, RegExp[]> = {
     /(?:https?:\/\/)?(?:www\.)?threads\.(?:net|com)\/@[\w.]+\/post\/[\w]+/i,
     /(?:https?:\/\/)?(?:www\.)?threads\.(?:net|com)\/share\/[\w-]+(?:\/|[?#]|$)/i,
   ],
+  // Music pages resolved to YouTube videos (downloaded as MP3); not listed
+  // among the supported platforms
+  music: [
+    /^(?:https?:\/\/)?(?:www\.)?artlist\.io\/royalty-free-music\/(?:album|song)\/[^/?#\s]+\/\d+/i,
+  ],
 };
+
+export const MUSIC_PLATFORM = 'music';
 
 export function detectPlatform(url: string): string | null {
   const trimmedUrl = url.trim().toLowerCase();
@@ -85,7 +92,7 @@ export function parseURLs(text: string): ParsedURL[] {
 
   return uniqueUrls.map((url) => {
     const platform = detectPlatform(url);
-    const platformInfo = platform ? PLATFORMS[platform] : null;
+    const platformInfo = platform ? PLATFORMS[platform] ?? null : null;
     return {
       url: platform ? normalizeVideoUrl(url, platform) : url,
       platform,

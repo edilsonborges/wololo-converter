@@ -105,4 +105,26 @@ test.describe('Wololo Converter App', () => {
     await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden()
   })
+
+  test('should resolve a music page link into MP3 queue items', async ({ page }) => {
+    await page.route('**/api/resolve', (route) =>
+      route.fulfill({
+        json: {
+          album: 'Album',
+          tracks: [
+            { title: 'Song', artist: 'Artist', duration: 120, video_url: null, source_url: 'https://artlist.io/royalty-free-music/song/song/2' },
+          ],
+        },
+      }),
+    )
+
+    await page.locator('textarea').fill('https://artlist.io/royalty-free-music/album/album/1')
+    await expect(page.getByText(/unsupported/)).toHaveCount(0)
+    await expect(page.getByText('360p', { exact: true })).toHaveCount(0)
+    await page.locator('button', { hasText: /Add 1 URL/ }).click()
+
+    await expect(page.getByText('Artist - Song')).toBeVisible()
+    await expect(page.getByText('No matching video found on YouTube')).toBeVisible()
+    await expect(page.getByTitle('Retry')).toBeVisible()
+  })
 })

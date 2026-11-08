@@ -5,6 +5,7 @@ import type {
   HealthResponse,
   JobProgressUpdate,
   PreviewResponse,
+  ResolveResponse,
 } from './types';
 
 const API_BASE = '/api';
@@ -61,6 +62,18 @@ export const api = {
       body: JSON.stringify({ url }),
     });
     return handleResponse<PreviewResponse>(response);
+  },
+
+  /**
+   * Resolve a music page link into the matching YouTube video of each track
+   */
+  async resolveMusicLink(url: string): Promise<ResolveResponse> {
+    const response = await fetch(`${API_BASE}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    return handleResponse<ResolveResponse>(response);
   },
 
   /**

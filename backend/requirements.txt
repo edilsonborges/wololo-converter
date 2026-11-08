@@ -17,6 +17,9 @@ yt-dlp[default,curl-cffi]==2026.8.19
 # HTTP client for validation
 httpx==0.27.2
 
+# Headless browser for reading music pages behind a bot check
+playwright==1.57.0
+
 # Rate limiting
 slowapi==0.1.9
 
