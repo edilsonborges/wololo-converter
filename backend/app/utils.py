@@ -135,8 +135,10 @@ def sanitize_filename(filename: str) -> str:
     # Remove path separators
     filename = filename.replace("/", "_").replace("\\", "_")
 
-    # Remove null bytes
-    filename = filename.replace("\x00", "")
+    # Control characters (newlines from post captions, tabs, NUL...) break
+    # Content-Disposition on some browsers (iOS Safari): fold into spaces
+    filename = re.sub(r"[\x00-\x1f\x7f]+", " ", filename)
+    filename = re.sub(r"\s+", " ", filename).strip()
 
     # Remove or replace problematic characters
     filename = re.sub(r'[<>:"|?*]', "_", filename)

@@ -3,6 +3,17 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.2] - 2026-11-08
+
+### Fixed
+
+- Threads videos are named after the first line of the post caption (up to
+  80 characters) instead of the whole multi-line caption, which produced
+  filenames with line breaks that some browsers, such as Safari on iPhone,
+  failed to download.
+- Download filenames never contain line breaks or control characters.
+- Accented characters in Threads captions are no longer garbled.
+
 ## [0.8.1] - 2026-11-08
 
 ### Fixed

@@ -263,3 +263,10 @@ class TestCleanupOldFiles:
         assert cleaned == 1
         assert not old.exists()
         assert active.exists()
+
+
+class TestSanitizeFilenameControlChars:
+    def test_newlines_and_tabs_become_single_spaces(self):
+        result = sanitize_filename("@user: Line one!\n\nLine two\tend.mp4")
+        assert result == "@user_ Line one! Line two end.mp4"
+        assert not any(ord(c) < 32 for c in result)

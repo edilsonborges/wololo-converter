@@ -1,4 +1,5 @@
 """Custom Threads video extractor — scrapes video data from Threads post pages."""
+import json
 import re
 from typing import Optional
 from urllib.parse import unquote
@@ -15,6 +16,27 @@ _HEADERS = {
     "sec-fetch-dest": "document",
     "sec-fetch-mode": "navigate",
 }
+
+
+TITLE_MAX_CHARS = 80
+
+
+def _caption_title(raw: str) -> str:
+    """First line of a post caption, as a short single-line title.
+
+    `raw` is the JSON-escaped string from the page. Captions can be long and
+    multi-line (hashtags, emoji); the whole thing makes an unusable filename.
+    """
+    try:
+        text = json.loads(f'"{raw}"')
+    except ValueError:
+        text = raw
+    first_line = next((line.strip() for line in text.splitlines() if line.strip()), "")
+    first_line = re.sub(r"\s+", " ", first_line)
+    if len(first_line) > TITLE_MAX_CHARS:
+        cut = first_line[:TITLE_MAX_CHARS].rsplit(" ", 1)[0] or first_line[:TITLE_MAX_CHARS]
+        first_line = cut.rstrip(" ,.;:-—") + "…"
+    return first_line
 
 
 def extract_threads_info(url: str) -> dict:
@@ -53,7 +75,7 @@ def extract_threads_info(url: str) -> dict:
     caption = ""
     cm = re.search(r'"caption":\{"text":"((?:[^"\\]|\\.)*)"', text)
     if cm:
-        caption = cm.group(1).encode().decode("unicode_escape", errors="replace")
+        caption = _caption_title(cm.group(1))
 
     # --- username ---
     username = ""
