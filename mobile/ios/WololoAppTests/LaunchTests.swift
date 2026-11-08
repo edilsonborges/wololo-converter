@@ -20,6 +20,10 @@ final class LaunchTests: XCTestCase {
         app.tabBars.buttons["Settings"].tap()
         XCTAssertTrue(app.textFields["settings.server"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.secureTextFields["Access key"].exists)
+        XCUIDevice.shared.orientation = .landscapeLeft
+        XCTAssertTrue(app.textFields["settings.server"].waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(app.frame.width, app.frame.height)
+        XCUIDevice.shared.orientation = .portrait
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = "Wololo settings"
         attachment.lifetime = .keepAlways

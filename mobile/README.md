@@ -44,7 +44,7 @@ O workflow **iOS Distribution** é manual e exporta um IPA para TestFlight ou Ad
 
 ## Certificados e secrets do iOS
 
-1. No Apple Developer, registre os App IDs `dev.edilson.wololo` e `dev.edilson.wololo.share`. Habilite App Groups nos dois e associe `group.dev.edilson.wololo`.
+1. Os App IDs `dev.edilson.wololo` e `dev.edilson.wololo.share`, o App Group `group.dev.edilson.wololo` e o registro do app no App Store Connect já foram criados na equipe pessoal. Mantenha esses identificadores nos profiles.
 2. No Acesso às Chaves do Mac, localize o certificado **Apple Distribution da sua equipe pessoal**, junto da chave privada. Exporte somente essa identidade como `.p12` e defina uma senha.
 3. Crie um provisioning profile para cada App ID usando o mesmo certificado. Para TestFlight, escolha App Store Connect. Para Ad Hoc, escolha Ad Hoc e inclua os UDIDs dos iPhones. Ambos precisam conter o App Group e os entitlements do projeto.
 4. No GitHub, abra o repositório, Settings, Secrets and variables, Actions. Cadastre a variável `IOS_TEAM_ID` com `5T3LZC3A68`.
@@ -62,7 +62,7 @@ O workflow **iOS Distribution** é manual e exporta um IPA para TestFlight ou Ad
 
 Para copiar um arquivo como Base64 no Mac, execute `base64 -i /caminho/do/arquivo | pbcopy`. A codificação serve para transportar o arquivo. O armazenamento seguro fica a cargo do GitHub Actions Secrets.
 
-Para obter a API key, abra App Store Connect, Users and Access, Integrations, App Store Connect API. Crie uma Team API key com permissão de upload, por exemplo App Manager, e baixe a `.p8`. Crie também o registro iOS do Wololo no App Store Connect, associado a `dev.edilson.wololo`, com um SKU próprio. Guarde o Apple ID numérico desse registro para administrar o app.
+Para obter a API key, abra App Store Connect, Users and Access, Integrations, App Store Connect API. Crie uma Team API key com permissão de upload, por exemplo App Manager, e baixe a `.p8`. O registro iOS do Wololo já existe no App Store Connect com Apple ID `6832327047` e SKU `wololo-ios`. Use esse registro para os próximos uploads.
 
 Depois, em Actions, selecione **iOS Distribution**, escolha a referência da release e execute **Run workflow**. Use `app-store-connect` com os profiles de TestFlight e marque `upload_testflight` para enviar o build. Use `ad-hoc` com os profiles Ad Hoc para gerar um IPA destinado aos aparelhos cadastrados. O número do build usa 100 mais o número da execução do workflow, reservando os primeiros números para builds locais.
 
@@ -83,6 +83,20 @@ Compartilhe um link para Wololo e escolha MP4 ou MP3. Vídeos são salvos em Fot
 O iOS pode encerrar a extensão. A transferência de um arquivo pronto usa uma sessão em segundo plano. Se a extensão fechar enquanto o servidor ainda processa, o app retoma o job quando for aberto. A fila compartilhada mantém esse estado. Uma transferência em background também depende das decisões de agendamento do sistema.
 
 Os testes automatizados usam respostas controladas. A validação final no aparelho precisa incluir compartilhamento a partir de outro app, permissões, rede interrompida, cancelamento e execução em segundo plano.
+
+## Validação do Android
+
+Em 08/11/2026, os 14 testes, lintDebug e builds debug/release passaram. O APK assinado mede 1.556.152 bytes e teve a assinatura verificada. A instalação e a abertura do app e do destino de compartilhamento foram confirmadas em um emulador dedicado. O download completo e a execução em segundo plano ainda precisam de validação em aparelho físico.
+
+## Validação do iOS
+
+Em 08/11/2026, com Xcode 26.2, o pacote WololoKit passou em 19 testes. O build Release para simulador compilou o app e a extensão. O teste de interface do scheme `WololoUITests` passou no simulador iPhone 17 com iOS 26.2, cobrindo abertura do app, rejeição de um link não suportado, fechamento do teclado e acesso às configurações de servidor e chave. O archive de dispositivo também passou com assinatura automática da equipe pessoal.
+
+O RF-08 tem dois comportamentos distintos no iOS. Quando o arquivo já está disponível, a transferência usa `URLSession` em segundo plano e o sistema pode entregar a conclusão ao app principal. Enquanto o servidor ainda prepara o arquivo ou mantém o job na fila, a extensão faz polling apenas enquanto está ativa. Fechar a extensão nessa fase exige abrir Wololo para retomar o acompanhamento. Uma notificação local depende de o código receber a conclusão e da permissão de notificações concedida pelo usuário.
+
+A extensão salva MP4 em Fotos com permissão de adicionar. Para MP3, oferece **Save to Files** pelo seletor de documentos. O app principal salva áudio em sua pasta Documents, visível em Arquivos. A fila e os arquivos temporários são compartilhados pelo App Group.
+
+O teste automatizado de interface cobre a tela principal. O compartilhamento a partir de apps reais, a gravação final em Fotos e Arquivos, a retomada após encerramento forçado e as trocas de rede ainda precisam ser validados no iPhone com o build distribuído. As metas de tempo, taxa de sucesso, memória e tamanho instalado do PRD dependem dessa medição no aparelho.
 
 ## Referências
 
