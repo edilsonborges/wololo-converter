@@ -3,6 +3,7 @@ import type { QueueItem, QueueConfig, QueueProcessingMode, JobStatus } from '../
 import { PLATFORMS } from '../types';
 import { Icon, PlatformIcon } from './Icon';
 import { SmoothProgressBar } from './SmoothProgressBar';
+import { ElapsedTime } from './ElapsedTime';
 
 interface QueueManagerProps {
   items: QueueItem[];
@@ -174,6 +175,15 @@ export const QueueManager: FC<QueueManagerProps> = ({
               {item.progress?.title && (
                 <span className="text-sm text-text-primary font-medium truncate">
                   {item.progress.title}
+                </span>
+              )}
+              {item.startedAt !== undefined && item.status !== 'pending' && (
+                <span className="ml-auto flex-shrink-0">
+                  <ElapsedTime
+                    startedAt={item.startedAt}
+                    endedAt={item.status === 'active' ? undefined : item.completedAt}
+                    label={item.status === 'completed' ? 'Took' : undefined}
+                  />
                 </span>
               )}
             </div>

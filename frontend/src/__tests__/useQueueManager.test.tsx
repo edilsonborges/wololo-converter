@@ -48,4 +48,34 @@ describe('useQueueManager automatic download', () => {
       expect(click).toHaveBeenCalledOnce();
     });
   });
+
+  it('records when processing started and finished', async () => {
+    vi.spyOn(api, 'startDownload').mockResolvedValue({
+      job_id: 'route-job',
+      message: 'Download started',
+      status: 'queued',
+    });
+    vi.spyOn(api, 'subscribeToProgress').mockImplementation((_jobId, callbacks) => {
+      queueMicrotask(() => callbacks.onComplete(completedUpdate));
+      return vi.fn();
+    });
+
+    const { result } = renderHook(() => useQueueManager());
+
+    act(() => {
+      result.current.addToQueue([
+        { url: 'https://x.com/user/status/123456', platform: 'twitter', isValid: true },
+      ], '480p');
+    });
+
+    await waitFor(() => {
+      expect(result.current.items[0].status).toBe('completed');
+    });
+
+    const item = result.current.items[0];
+    expect(item.startedAt).toBeTypeOf('number');
+    expect(item.completedAt).toBeTypeOf('number');
+    expect(item.completedAt!).toBeGreaterThanOrEqual(item.startedAt!);
+    expect(item.startedAt!).toBeGreaterThanOrEqual(item.addedAt);
+  });
 });

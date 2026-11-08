@@ -2,7 +2,6 @@
 import asyncio
 import json
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict
 
@@ -16,7 +15,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from .config import settings
 from .database import get_session, get_db_context
-from .models import DownloadJob, JobStatus, OutputFormat, VideoQuality
+from .models import DownloadJob, JobStatus, OutputFormat, VideoQuality, utcnow
 from .schemas import (
     DownloadRequest,
     DownloadStartResponse,
@@ -29,6 +28,7 @@ from .schemas import (
     PreviewResponse,
 )
 from .download_service import (
+    TEMP_SUFFIXES,
     DownloadProgress,
     download_service,
     get_yt_dlp_version,
@@ -51,12 +51,6 @@ download_tasks: Dict[str, asyncio.Task] = {}
 
 TERMINAL_STATUSES = (JobStatus.COMPLETED.value, JobStatus.FAILED.value, JobStatus.CANCELLED.value)
 VIDEO_EXTENSIONS = (".mp4", ".webm", ".mkv")
-# yt-dlp intermediate artifacts that must never be served
-TEMP_SUFFIXES = (".part", ".ytdl", ".temp")
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 async def persist_job_result(progress: DownloadProgress, result: dict) -> None:
@@ -68,7 +62,7 @@ async def persist_job_result(progress: DownloadProgress, result: dict) -> None:
         "eta": None,
         "current_stage": progress.current_stage,
         "error_message": progress.error_message,
-        "completed_at": _utcnow(),
+        "completed_at": utcnow(),
     }
     if progress.title:
         values["title"] = progress.title
@@ -225,8 +219,8 @@ async def start_download(
             output_format=db_output_format,
             quality=quality.value,
             status=JobStatus.QUEUED.value,
-            created_at=_utcnow(),
-            started_at=_utcnow(),
+            created_at=utcnow(),
+            started_at=utcnow(),
         )
         db.add(job)
         await db.commit()
@@ -467,7 +461,7 @@ async def cancel_job(job_id: str, db: AsyncSession = Depends(get_session)):
         update(DownloadJob)
         .where(DownloadJob.id == job_id)
         .where(DownloadJob.status.notin_(TERMINAL_STATUSES))
-        .values(status=JobStatus.CANCELLED.value, completed_at=_utcnow())
+        .values(status=JobStatus.CANCELLED.value, completed_at=utcnow())
     )
     await db.commit()
 

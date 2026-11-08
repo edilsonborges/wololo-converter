@@ -113,6 +113,8 @@ export interface QueueItem {
   progress?: JobProgressUpdate;
   error?: string;
   addedAt: number;
+  /** When processing actually started (the item left the pending state) */
+  startedAt?: number;
   completedAt?: number;
   autoDownload?: boolean;
 }

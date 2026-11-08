@@ -1,11 +1,16 @@
 """Database models for Wololo Converter"""
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 from sqlalchemy import Column, String, DateTime, Integer, Float, Text
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
+
+
+def utcnow() -> datetime:
+    """Naive UTC timestamp (SQLite stores naive datetimes)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class JobStatus(str, Enum):
@@ -68,7 +73,7 @@ class DownloadJob(Base):
     error_message = Column(Text, nullable=True)
 
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
 

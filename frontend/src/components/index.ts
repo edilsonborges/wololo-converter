@@ -7,3 +7,4 @@ export { QueueManager } from './QueueManager';
 export { Icon, PlatformIcon, FormatIcon, type IconName } from './Icon';
 export { VideoPreview } from './VideoPreview';
 export { SmoothProgressBar } from './SmoothProgressBar';
+export { ElapsedTime } from './ElapsedTime';

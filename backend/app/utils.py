@@ -1,4 +1,5 @@
 """Utility functions for URL validation, security, and file handling"""
+import logging
 import os
 import re
 import shutil
@@ -8,6 +9,8 @@ from urllib.parse import parse_qs, urlparse
 import asyncio
 
 from .config import settings
+
+logger = logging.getLogger(__name__)
 
 
 # Platform detection patterns
@@ -226,11 +229,11 @@ async def run_cleanup_task():
 
             cleaned = await cleanup_old_files(set(download_service.active_jobs))
             if cleaned > 0:
-                print(f"Cleaned up {cleaned} old job directories")
+                logger.info("Cleaned up %d old job directories", cleaned)
         except asyncio.CancelledError:
             break
         except Exception as e:
-            print(f"Cleanup error: {e}")
+            logger.exception("Cleanup error: %s", e)
 
 
 def format_file_size(size_bytes: int) -> str:

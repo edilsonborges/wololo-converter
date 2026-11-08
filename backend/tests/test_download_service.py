@@ -482,3 +482,168 @@ class TestPreviewCookies:
         download_service_module.extract_video_preview("https://www.youtube.com/watch?v=test123")
 
         assert captured["cookiefile"] == str(cookies)
+
+
+class TestSingleExtractCall:
+    def test_run_download_extracts_and_downloads_in_one_call(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(download_service_module.settings, "temp_dir", tmp_path)
+        calls = []
+
+        class FakeYDL:
+            def __init__(self, opts):
+                self.opts = opts
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def extract_info(self, url, download=False):
+                calls.append(("extract_info", download))
+                job_dir = tmp_path / "job"
+                job_dir.mkdir(exist_ok=True)
+                out = job_dir / "Clip.mp4"
+                out.write_bytes(b"video")
+                (job_dir / "Clip.mp3").write_bytes(b"newer but not the output")
+                return {
+                    "title": "Clip",
+                    "duration": 12,
+                    "requested_downloads": [{"filepath": str(out)}],
+                }
+
+            def download(self, urls):
+                calls.append(("download", urls))
+
+        monkeypatch.setattr(download_service_module.yt_dlp, "YoutubeDL", FakeYDL)
+
+        result = DownloadService()._run_download(
+            "https://www.youtube.com/watch?v=test123", "job", VideoQuality.Q_720P, DownloadProgress("job")
+        )
+
+        assert calls == [("extract_info", True)]
+        assert result["success"] is True
+        assert result["filename"] == "Clip.mp4"
+        assert result["title"] == "Clip"
+
+    def test_progress_hook_takes_title_from_info_dict(self):
+        progress = DownloadProgress("job")
+        progress.progress_hook({
+            "status": "downloading",
+            "downloaded_bytes": 1,
+            "total_bytes": 10,
+            "info_dict": {"title": "From hook"},
+        })
+        assert progress.title == "From hook"
+
+
+class TestFormatting:
+    def test_format_speed(self):
+        assert download_service_module.format_speed(None) is None
+        assert download_service_module.format_speed(512) == "512 B/s"
+        assert download_service_module.format_speed(2048) == "2.0 KiB/s"
+        assert download_service_module.format_speed(3 * 1024 * 1024) == "3.0 MiB/s"
+
+    def test_format_eta(self):
+        assert download_service_module.format_eta(None) is None
+        assert download_service_module.format_eta(65) == "01:05"
+        assert download_service_module.format_eta(3725) == "01:02:05"
+
+
+class TestThreadsStreaming:
+    def _patch(self, monkeypatch, tmp_path, chunks, content_length):
+        class FakeResponse:
+            headers = {"content-length": str(content_length)}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def raise_for_status(self):
+                return None
+
+            def iter_bytes(self, chunk_size):
+                yield from chunks
+
+        monkeypatch.setattr(download_service_module.settings, "temp_dir", tmp_path)
+        monkeypatch.setattr(
+            download_service_module,
+            "extract_threads_info",
+            lambda url: {"title": "Thread video", "video_url": "https://cdn.example.com/v.mp4"},
+        )
+        monkeypatch.setattr(httpx, "stream", lambda *args, **kwargs: FakeResponse())
+
+    def test_threads_download_reports_speed(self, monkeypatch, tmp_path):
+        self._patch(monkeypatch, tmp_path, [b"a" * 50, b"b" * 50], 100)
+        speeds = []
+        progress = DownloadProgress("job", callback=lambda u: speeds.append(u.speed))
+
+        result = DownloadService()._run_download(
+            "https://www.threads.net/@user/post/123", "job", VideoQuality.Q_720P, progress
+        )
+
+        assert result["success"] is True
+        assert any(s and s.endswith("/s") for s in speeds)
+
+    def test_threads_download_enforces_max_file_size(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(download_service_module.settings, "max_file_size_mb", 1)
+        self._patch(monkeypatch, tmp_path, [b"x"], 2 * 1024 * 1024)
+
+        result = DownloadService()._run_download(
+            "https://www.threads.net/@user/post/123", "job", VideoQuality.Q_720P, DownloadProgress("job")
+        )
+
+        assert result["success"] is False
+        assert "1 MB limit" in result["error"]
+        assert not (tmp_path / "job").exists()
+
+    def test_threads_download_enforces_size_without_content_length(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(download_service_module.settings, "max_file_size_mb", 1)
+        chunk = b"x" * (512 * 1024)
+        self._patch(monkeypatch, tmp_path, [chunk, chunk, chunk], 0)
+
+        result = DownloadService()._run_download(
+            "https://www.threads.net/@user/post/123", "job", VideoQuality.Q_720P, DownloadProgress("job")
+        )
+
+        assert result["success"] is False
+        assert not (tmp_path / "job").exists()
+
+
+class TestDownloadTimeout:
+    async def test_timeout_stops_worker_and_fails_job(self, monkeypatch, tmp_path):
+        import asyncio
+        import threading
+
+        monkeypatch.setattr(download_service_module.settings, "temp_dir", tmp_path)
+        monkeypatch.setattr(download_service_module.settings, "download_timeout_seconds", 1)
+        service = DownloadService()
+        finished = []
+
+        def stuck_download(url, job_id, quality, progress):
+            (tmp_path / job_id).mkdir()
+            try:
+                for _ in range(1000):
+                    progress.progress_hook({"status": "downloading", "downloaded_bytes": 1, "total_bytes": 10})
+                    threading.Event().wait(0.01)
+            except Exception as e:
+                return {"success": False, "error": str(e)}
+            return {"success": True, "title": "t", "filename": "never.mp4"}
+
+        monkeypatch.setattr(service, "_run_download", stuck_download)
+
+        async def on_finish(progress, result):
+            finished.append((progress.status, result["error"]))
+
+        job_id, task, _ = await service.start_download(
+            "https://www.youtube.com/watch?v=test123",
+            VideoQuality.Q_720P,
+            on_finish=on_finish,
+        )
+        await asyncio.wait_for(task, timeout=8)
+
+        assert finished == [(JobStatus.FAILED, "Download timed out after 1 seconds")]
+        assert job_id not in service.active_jobs
+        assert not (tmp_path / job_id).exists()

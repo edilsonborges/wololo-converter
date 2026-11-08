@@ -107,7 +107,7 @@ export function useQueueManager() {
       cleanupRefs.current.delete(id);
     }
 
-    updateItem(id, { status: 'cancelled' });
+    updateItem(id, { status: 'cancelled', completedAt: Date.now() });
   }, [items, updateItem]);
 
   // Retry a failed item
@@ -117,6 +117,8 @@ export function useQueueManager() {
       error: undefined,
       jobId: undefined,
       progress: undefined,
+      startedAt: undefined,
+      completedAt: undefined,
     });
   }, [updateItem]);
 
@@ -166,7 +168,7 @@ export function useQueueManager() {
 
   // Start processing a single item
   const startItemDownload = useCallback(async (item: QueueItem) => {
-    updateItem(item.id, { status: 'active' });
+    updateItem(item.id, { status: 'active', startedAt: Date.now(), completedAt: undefined });
 
     try {
       const response = await api.startDownload({

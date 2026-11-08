@@ -1,5 +1,6 @@
 """Download service using yt-dlp with progress tracking"""
 import asyncio
+import logging
 import shutil
 import time
 import threading
@@ -17,8 +18,35 @@ from .utils import get_safe_filepath, sanitize_filename, validate_url, detect_pl
 from .threads_extractor import extract_threads_info
 
 
+logger = logging.getLogger(__name__)
+
 # Thread pool for running yt-dlp (it's not async-native)
 executor = ThreadPoolExecutor(max_workers=settings.max_concurrent_downloads)
+
+# yt-dlp intermediate artifacts that are never a finished output
+TEMP_SUFFIXES = (".part", ".ytdl", ".temp")
+
+
+def format_speed(bytes_per_second: Optional[float]) -> Optional[str]:
+    """Human readable transfer speed, e.g. "1.5 MiB/s"."""
+    if not bytes_per_second:
+        return None
+    if bytes_per_second > 1024 * 1024:
+        return f"{bytes_per_second / 1024 / 1024:.1f} MiB/s"
+    if bytes_per_second > 1024:
+        return f"{bytes_per_second / 1024:.1f} KiB/s"
+    return f"{bytes_per_second:.0f} B/s"
+
+
+def format_eta(seconds: Optional[float]) -> Optional[str]:
+    """ETA as MM:SS or HH:MM:SS."""
+    if not seconds:
+        return None
+    mins, secs = divmod(int(seconds), 60)
+    hours, mins = divmod(mins, 60)
+    if hours:
+        return f"{hours:02d}:{mins:02d}:{secs:02d}"
+    return f"{mins:02d}:{secs:02d}"
 
 
 def _has_valid_cookies_file() -> bool:
@@ -72,8 +100,10 @@ class DownloadProgress:
         self._last_real_update: float = 0.0
         self._interpolation_timer: Optional[threading.Timer] = None
         self._in_conversion = False
-        # Set by cancel_job; checked from the worker thread to abort the download
+        # Set by cancel_job (or the timeout); checked from the worker thread
+        # to abort the download
         self.cancel_event = threading.Event()
+        self.timed_out = False
 
     @property
     def cancelled(self) -> bool:
@@ -143,6 +173,8 @@ class DownloadProgress:
         if status == "downloading":
             self.status = JobStatus.DOWNLOADING
             self.current_stage = "Downloading..."
+            if not self.title:
+                self.title = (d.get("info_dict") or {}).get("title")
 
             # Extract raw progress (0-100) and scale to 0-70%
             raw_progress = 0.0
@@ -160,25 +192,13 @@ class DownloadProgress:
 
             self.progress = raw_progress * self.DOWNLOAD_MAX / 100
 
-            # Extract speed
-            speed = d.get("speed")
+            # Extract speed and ETA
+            speed = format_speed(d.get("speed"))
             if speed:
-                if speed > 1024 * 1024:
-                    self.speed = f"{speed / 1024 / 1024:.1f} MiB/s"
-                elif speed > 1024:
-                    self.speed = f"{speed / 1024:.1f} KiB/s"
-                else:
-                    self.speed = f"{speed:.0f} B/s"
-
-            # Extract ETA
-            eta = d.get("eta")
+                self.speed = speed
+            eta = format_eta(d.get("eta"))
             if eta:
-                mins, secs = divmod(int(eta), 60)
-                hours, mins = divmod(mins, 60)
-                if hours:
-                    self.eta = f"{hours:02d}:{mins:02d}:{secs:02d}"
-                else:
-                    self.eta = f"{mins:02d}:{secs:02d}"
+                self.eta = eta
 
             # Extract filename
             if d.get("filename"):
@@ -404,6 +424,9 @@ class DownloadService:
             safe_name = sanitize_filename(f"{info['title']}.mp4")
             output_file = output_dir / safe_name
 
+            max_bytes = settings.max_file_size_mb * 1024 * 1024
+            too_large = f"File is larger than the {settings.max_file_size_mb} MB limit"
+
             with _httpx.stream(
                 "GET",
                 info["video_url"],
@@ -413,23 +436,33 @@ class DownloadService:
             ) as resp:
                 resp.raise_for_status()
                 total = int(resp.headers.get("content-length", 0))
+                if total > max_bytes:
+                    raise ValueError(too_large)
                 downloaded = 0
+                started = time.monotonic()
 
                 with open(output_file, "wb") as f:
                     for chunk in resp.iter_bytes(chunk_size=256 * 1024):
                         progress.raise_if_cancelled()
                         f.write(chunk)
                         downloaded += len(chunk)
+                        if downloaded > max_bytes:
+                            raise ValueError(too_large)
                         if total > 0:
                             raw = (downloaded / total) * 100
                             progress.progress = raw * progress.DOWNLOAD_MAX / 100
                             if int(progress.progress) > progress._last_progress:
                                 progress._last_progress = int(progress.progress)
-                                speed_str = None
-                                progress.speed = speed_str
+                                elapsed = time.monotonic() - started
+                                if elapsed > 0:
+                                    rate = downloaded / elapsed
+                                    progress.speed = format_speed(rate)
+                                    progress.eta = format_eta((total - downloaded) / rate)
                                 progress._notify()
 
             progress.progress = progress.DOWNLOAD_MAX
+            progress.speed = None
+            progress.eta = None
             progress._notify()
 
             if quality == VideoQuality.MP3:
@@ -474,6 +507,8 @@ class DownloadService:
             }
 
         except Exception as e:
+            # Don't leave a partial video behind (e.g. size limit, network error)
+            shutil.rmtree(settings.temp_dir / job_id, ignore_errors=True)
             return {"success": False, "error": str(e)}
 
     def _run_download(
@@ -493,34 +528,17 @@ class DownloadService:
 
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
-                # First, extract info
                 progress.status = JobStatus.VALIDATING
                 progress.current_stage = "Extracting video info..."
                 progress._notify()
 
-                info = ydl.extract_info(url, download=False)
-                progress.title = info.get("title", "Unknown")
-                progress.raise_if_cancelled()
+                # One call extracts metadata and downloads, avoiding a second
+                # round-trip to the platform. The title reaches the UI via the
+                # progress hook's info_dict as soon as the download starts.
+                info = ydl.extract_info(url, download=True) or {}
+                progress.title = info.get("title") or progress.title or "Unknown"
 
-                # Start download
-                progress.status = JobStatus.DOWNLOADING
-                progress.current_stage = "Starting download..."
-                progress._notify()
-
-                ydl.download([url])
-
-                # Find the output file
-                output_dir = settings.temp_dir / job_id
-                files = list(output_dir.glob("*"))
-
-                # Filter out part files and find the actual output
-                output_files = [f for f in files if not f.suffix.endswith(".part")]
-
-                if not output_files:
-                    raise Exception("Download completed but no output file found")
-
-                # Get the most recently modified file
-                output_file = max(output_files, key=lambda f: f.stat().st_mtime)
+                output_file = self._find_output_file(job_id, info)
 
                 return {
                     "success": True,
@@ -549,6 +567,23 @@ class DownloadService:
 
         except Exception as e:
             return {"success": False, "error": str(e)}
+
+    @staticmethod
+    def _find_output_file(job_id: str, info: dict) -> Path:
+        """Locate the finished file: yt-dlp's reported path, else newest file."""
+        output_dir = settings.temp_dir / job_id
+        for download in info.get("requested_downloads") or []:
+            filepath = download.get("filepath")
+            if filepath and Path(filepath).is_file():
+                return Path(filepath)
+
+        output_files = [
+            f for f in output_dir.glob("*")
+            if f.is_file() and not f.name.endswith(TEMP_SUFFIXES)
+        ]
+        if not output_files:
+            raise Exception("Download completed but no output file found")
+        return max(output_files, key=lambda f: f.stat().st_mtime)
 
     async def start_download(
         self,
@@ -588,7 +623,7 @@ class DownloadService:
             result: dict = {"success": False, "error": "Unknown error"}
             try:
                 # Run blocking download in thread pool
-                result = await loop.run_in_executor(
+                future = loop.run_in_executor(
                     executor,
                     self._run_download,
                     url,
@@ -596,13 +631,36 @@ class DownloadService:
                     quality,
                     progress,
                 )
+                try:
+                    result = await asyncio.wait_for(
+                        asyncio.shield(future),
+                        timeout=settings.download_timeout_seconds,
+                    )
+                except asyncio.TimeoutError:
+                    # A thread can't be killed: ask it to stop at the next
+                    # yt-dlp hook and wait so the slot is freed only when the
+                    # work has really ended.
+                    progress.timed_out = True
+                    progress.cancel_event.set()
+                    await future
 
-                if progress.cancelled:
+                if progress.timed_out:
+                    progress.status = JobStatus.FAILED
+                    limit = settings.download_timeout_seconds
+                    progress.error_message = "Download timed out after " + (
+                        f"{limit // 60} minutes" if limit >= 60 else f"{limit} seconds"
+                    )
+                    shutil.rmtree(settings.temp_dir / job_id, ignore_errors=True)
+                    result = {"success": False, "error": progress.error_message}
+                    self._remember_completed(progress)
+                    progress._notify()
+                elif progress.cancelled:
                     # Keep the cancelled state; drop partial/complete files
                     progress.status = JobStatus.CANCELLED
                     progress.error_message = "Cancelled by user"
                     shutil.rmtree(settings.temp_dir / job_id, ignore_errors=True)
                     result = {"success": False, "error": "Cancelled by user", "cancelled": True}
+                    self._remember_completed(progress)
                 elif result["success"]:
                     progress.status = JobStatus.COMPLETED
                     progress.progress = 100
@@ -634,8 +692,8 @@ class DownloadService:
                 if on_finish:
                     try:
                         await on_finish(progress, result)
-                    except Exception as e:
-                        print(f"Failed to persist job {job_id}: {e}")
+                    except Exception:
+                        logger.exception("Failed to persist job %s", job_id)
 
         task = asyncio.create_task(download_task())
         return job_id, task, platform

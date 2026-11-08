@@ -82,7 +82,7 @@ jobs:
 
   frontend-e2e:
     name: Frontend E2E Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # Playwright has no Chromium build for ubuntu-latest (26.04) yet
     defaults:
       run:
         working-directory: frontend

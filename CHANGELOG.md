@@ -3,6 +3,31 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-11-08
+
+### Added
+
+- Each queue item shows how long it took: a live timer while processing and
+  the frozen total ("Took 1m 23s") once completed, failed or cancelled.
+- Threads downloads report speed and ETA.
+
+### Changed
+
+- yt-dlp extracts metadata and downloads in a single call instead of two,
+  saving one round-trip to the platform per download. The title still shows
+  as soon as the download starts.
+- Backend uses `logging` with timestamps instead of `print`; unhandled errors
+  are logged with their traceback.
+
+### Fixed
+
+- `DOWNLOAD_TIMEOUT_SECONDS` is now enforced: a stuck download is stopped,
+  its files removed and the job marked as failed, freeing its slot.
+- `MAX_FILE_SIZE_MB` is now enforced for Threads downloads.
+- Replace deprecated `datetime.utcnow()` usage.
+- CI: run Playwright E2E on `ubuntu-24.04` (no Chromium build for the new
+  `ubuntu-latest` image).
+
 ## [0.6.2] - 2026-11-08
 
 ### Fixed

@@ -1,5 +1,6 @@
 """Main FastAPI application for Wololo Converter"""
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -15,6 +16,12 @@ from .utils import run_cleanup_task
 from .version import APP_VERSION
 
 
+logging.basicConfig(
+    level=logging.DEBUG if settings.debug else logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+)
+logger = logging.getLogger("app")
+
 # Background task handle
 cleanup_task = None
 
@@ -25,22 +32,22 @@ async def lifespan(app: FastAPI):
     global cleanup_task
 
     # Startup
-    print(f"Starting {settings.app_name}...")
+    logger.info("Starting %s %s...", settings.app_name, APP_VERSION)
 
     # Initialize database
     await init_db()
-    print("Database initialized")
+    logger.info("Database initialized")
 
     # Start cleanup task
     cleanup_task = asyncio.create_task(run_cleanup_task())
-    print(f"File cleanup task started (interval: {settings.cleanup_interval_minutes} min)")
+    logger.info("File cleanup task started (interval: %d min)", settings.cleanup_interval_minutes)
 
-    print(f"Server ready at http://{settings.host}:{settings.port}")
+    logger.info("Server ready at http://%s:%s", settings.host, settings.port)
 
     yield
 
     # Shutdown
-    print("Shutting down...")
+    logger.info("Shutting down...")
 
     if cleanup_task:
         cleanup_task.cancel()
@@ -49,7 +56,7 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
 
-    print("Goodbye!")
+    logger.info("Goodbye!")
 
 
 # Create FastAPI app
@@ -78,6 +85,7 @@ app.add_middleware(
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     """Handle unexpected exceptions"""
+    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
         content={
