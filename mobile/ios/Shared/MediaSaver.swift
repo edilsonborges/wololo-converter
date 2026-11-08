@@ -37,7 +37,8 @@ struct MediaSaver {
         var savedPath: String?
         if entry.format == .mp4 {
             try await requestPhotoPermission()
-            try await PHPhotoLibrary.shared().performChanges {
+            // Photos runs this block on its own queue; it must not inherit MainActor isolation.
+            try await PHPhotoLibrary.shared().performChanges { @Sendable in
                 PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: file)
             }
             try? FileManager.default.removeItem(at: file)

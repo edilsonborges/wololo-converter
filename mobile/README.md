@@ -92,6 +92,24 @@ Em 08/11/2026, os 14 testes, lintDebug e builds debug/release passaram. O APK as
 
 Em 08/11/2026, com Xcode 26.2, o pacote WololoKit passou em 19 testes. O build Release para simulador compilou o app e a extensão. O teste de interface do scheme `WololoUITests` passou no simulador iPhone 17 com iOS 26.2, cobrindo abertura do app, rejeição de um link não suportado, fechamento do teclado e acesso às configurações de servidor e chave. O archive de dispositivo também passou com assinatura automática da equipe pessoal.
 
+O build 2 corrige um encerramento ao salvar MP4 em Fotos. A regressão do scheme `WololoTests` reproduziu o crash em Release chamando `MediaSaver` do app com um vídeo válido e permissão concedida. Após a correção, o teste passou e confirmou o estado salvo e a remoção do arquivo temporário. O bloco executado por Fotos usa `@Sendable` para não herdar o isolamento de interface do `MainActor`.
+
+Para executar essa regressão em um simulador dedicado, substitua `SIMULATOR_UDID` pelo identificador do simulador. Ele precisa estar iniciado antes dos comandos de instalação e permissão:
+
+```sh
+xcodebuild -project mobile/ios/Wololo.xcodeproj -scheme WololoTests \
+  -configuration Release -destination 'platform=iOS Simulator,id=SIMULATOR_UDID' \
+  -derivedDataPath /tmp/wololo-ios-tests ENABLE_TESTABILITY=YES \
+  CODE_SIGNING_ALLOWED=NO build-for-testing
+xcrun simctl install SIMULATOR_UDID \
+  /tmp/wololo-ios-tests/Build/Products/Release-iphonesimulator/Wololo.app
+xcrun simctl privacy SIMULATOR_UDID grant photos-add dev.edilson.wololo
+xcodebuild -project mobile/ios/Wololo.xcodeproj -scheme WololoTests \
+  -configuration Release -destination 'platform=iOS Simulator,id=SIMULATOR_UDID' \
+  -derivedDataPath /tmp/wololo-ios-tests -parallel-testing-enabled NO \
+  ENABLE_TESTABILITY=YES CODE_SIGNING_ALLOWED=NO test-without-building
+```
+
 O RF-08 tem dois comportamentos distintos no iOS. Quando o arquivo já está disponível, a transferência usa `URLSession` em segundo plano e o sistema pode entregar a conclusão ao app principal. Enquanto o servidor ainda prepara o arquivo ou mantém o job na fila, a extensão faz polling apenas enquanto está ativa. Fechar a extensão nessa fase exige abrir Wololo para retomar o acompanhamento. Uma notificação local depende de o código receber a conclusão e da permissão de notificações concedida pelo usuário.
 
 A extensão salva MP4 em Fotos com permissão de adicionar. Para MP3, oferece **Save to Files** pelo seletor de documentos. O app principal salva áudio em sua pasta Documents, visível em Arquivos. A fila e os arquivos temporários são compartilhados pelo App Group.

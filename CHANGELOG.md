@@ -3,6 +3,13 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.9.1] - 2026-11-08
+
+### Fixed
+
+- Prevent an iOS crash when saving a video to Photos or resuming a pending save after reopening the app.
+- Exercise the actual Photos save path and run iOS interface checks in Release configuration.
+
 ## [0.9.0] - 2026-11-08
 
 ### Added

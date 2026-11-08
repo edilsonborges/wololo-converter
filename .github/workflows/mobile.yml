@@ -38,12 +38,37 @@ jobs:
           -configuration Release -destination 'generic/platform=iOS Simulator'
           -derivedDataPath "$RUNNER_TEMP/WololoDerivedData"
           CODE_SIGNING_ALLOWED=NO build
-      - name: Test iOS app launch and settings
+      - name: Test iOS release launch and settings
         run: >-
           xcodebuild -project mobile/ios/Wololo.xcodeproj -scheme WololoUITests
+          -configuration Release
           -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.2'
           -derivedDataPath "$RUNNER_TEMP/WololoUITests"
           CODE_SIGNING_ALLOWED=NO test
+      - name: Prepare simulator for Photos regression
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          devices = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '--json']))['devices']
+          simulator = next(device for device in devices['com.apple.CoreSimulator.SimRuntime.iOS-26-2'] if device['name'] == 'iPhone 17')
+          if simulator['state'] != 'Booted':
+              subprocess.run(['xcrun', 'simctl', 'boot', simulator['udid']], check=True)
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('WOLOLO_TEST_SIMULATOR=' + simulator['udid'] + '\n')
+          PY
+      - name: Test saving a real video to Photos in Release
+        run: |
+          xcrun simctl bootstatus "$WOLOLO_TEST_SIMULATOR" -b
+          xcodebuild -project mobile/ios/Wololo.xcodeproj -scheme WololoTests \
+            -configuration Release -destination "platform=iOS Simulator,id=$WOLOLO_TEST_SIMULATOR" \
+            -derivedDataPath "$RUNNER_TEMP/WololoPhotosTests" \
+            CODE_SIGNING_ALLOWED=NO ENABLE_TESTABILITY=YES build-for-testing
+          xcrun simctl install "$WOLOLO_TEST_SIMULATOR" "$RUNNER_TEMP/WololoPhotosTests/Build/Products/Release-iphonesimulator/Wololo.app"
+          xcrun simctl privacy "$WOLOLO_TEST_SIMULATOR" grant photos-add dev.edilson.wololo
+          xcodebuild -project mobile/ios/Wololo.xcodeproj -scheme WololoTests \
+            -configuration Release -destination "platform=iOS Simulator,id=$WOLOLO_TEST_SIMULATOR" \
+            -derivedDataPath "$RUNNER_TEMP/WololoPhotosTests" -parallel-testing-enabled NO \
+            CODE_SIGNING_ALLOWED=NO ENABLE_TESTABILITY=YES test-without-building
       - name: Verify device archive
         run: >-
           xcodebuild -project mobile/ios/Wololo.xcodeproj -scheme Wololo

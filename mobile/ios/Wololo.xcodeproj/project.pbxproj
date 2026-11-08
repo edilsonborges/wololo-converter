@@ -19,6 +19,7 @@
 		59F672D65E3FCE40637766BE /* MediaSaver.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5F167409F3ACF431A05CF0F /* MediaSaver.swift */; };
 		5E917AF7FCE4F64912A6FC48 /* WololoKit in Frameworks */ = {isa = PBXBuildFile; productRef = 229AD6742C5C93AFCD4D8B1A /* WololoKit */; };
 		674F5C909A3C380FE9BB0F24 /* ShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22558D00AED6F4B52E9AFDF2 /* ShareView.swift */; };
+		6A2A9949C5D1A173B7DB45AB /* WololoKit in Frameworks */ = {isa = PBXBuildFile; productRef = 067D37CF9BDBEB9AA2EB220A /* WololoKit */; };
 		72F092B901CC55669406CFCE /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4681A56AF7271210FE5B3133 /* AppModel.swift */; };
 		7484EDEFC3B5ABD3346A1DC5 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 186E95A7CF92B94895210ADC /* ShareViewController.swift */; };
 		79C4F9D111D10CD5E7BF698F /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFF474235F6898B074AB88A7 /* Localization.swift */; };
@@ -26,9 +27,11 @@
 		80A6DD78AD400C6CD2599EBD /* ProcessOwnership.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7DB7D0D5CB46C008B49490B /* ProcessOwnership.swift */; };
 		8E6BD54465745CB85686981D /* MediaSaver.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5F167409F3ACF431A05CF0F /* MediaSaver.swift */; };
 		9FFB8C7E593CE8811C800C17 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = D6687869CA79C23CD204CD0A /* Localizable.strings */; };
+		A69B80A136338AF8888CC032 /* MediaSaverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55FDC303DBAF8E09A94263E5 /* MediaSaverTests.swift */; };
 		A9A6D3A9346B9DC68E0CCE86 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = D6687869CA79C23CD204CD0A /* Localizable.strings */; };
 		A9B32671B4A7D3E6217350C4 /* WololoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D68C4FC242C2C1B9C1524D1 /* WololoApp.swift */; };
 		BEFCA1316691F95F4D32474F /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E3FF45363478BE60F92DB8 /* SettingsView.swift */; };
+		C35422B470D1E958C650F286 /* video.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = D68131AAEDF917FD2F9735AF /* video.mp4 */; };
 		E3813A828A08A42BDFECD8FE /* ProcessOwnership.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7DB7D0D5CB46C008B49490B /* ProcessOwnership.swift */; };
 		FB67C7535961784150F21B1E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2AA42AC8F84F248BDDACEBF9 /* Assets.xcassets */; };
 		FDCE62E9356F7C1582BD9BA5 /* WololoKit in Frameworks */ = {isa = PBXBuildFile; productRef = 7D39A51BABE68DBF8E26775E /* WololoKit */; };
@@ -37,6 +40,13 @@
 
 /* Begin PBXContainerItemProxy section */
 		6D16E3E656D6328043EDE4ED /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 9A260328DDA42CB0477B94CF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 0FF803F0E381CB311DF21F1B;
+			remoteInfo = Wololo;
+		};
+		7AE70F05FAFF830DFB685C2C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 9A260328DDA42CB0477B94CF /* Project object */;
 			proxyType = 1;
@@ -77,12 +87,15 @@
 		4681A56AF7271210FE5B3133 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		48B3F9820103BE684545D7C4 /* Wololo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Wololo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4F04BF6DDC99BC06D3292814 /* WololoUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WololoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		55FDC303DBAF8E09A94263E5 /* MediaSaverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaSaverTests.swift; sourceTree = "<group>"; };
 		689C2FB70A5650A3447E8D37 /* StatusTitle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusTitle.swift; sourceTree = "<group>"; };
 		8B424CD010EBCD7F042B9249 /* LaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchTests.swift; sourceTree = "<group>"; };
 		98322E8058A72E625E9D38F7 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		B7E3FF45363478BE60F92DB8 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		B8C266D4F3E1F835C63E18BA /* WololoShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = WololoShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		C36A2E6AF26B06C7294DF092 /* WololoTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WololoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C7DB7D0D5CB46C008B49490B /* ProcessOwnership.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessOwnership.swift; sourceTree = "<group>"; };
+		D68131AAEDF917FD2F9735AF /* video.mp4 */ = {isa = PBXFileReference; path = video.mp4; sourceTree = "<group>"; };
 		E65ECD8A833A27162D8C10C0 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
 		F5F167409F3ACF431A05CF0F /* MediaSaver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaSaver.swift; sourceTree = "<group>"; };
 		FFF474235F6898B074AB88A7 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
@@ -94,6 +107,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				5E917AF7FCE4F64912A6FC48 /* WololoKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BA6B28390A19B44D3ED94238 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6A2A9949C5D1A173B7DB45AB /* WololoKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -127,6 +148,7 @@
 				11800883061AF00EFB1DDFFB /* WololoApp */,
 				FB501E5C2161C256F1167660 /* WololoAppTests */,
 				E0D8EA70B0BEB48770457BF2 /* WololoShareExtension */,
+				6090A5BF49B724B1A21CFFA9 /* WololoUnitTests */,
 				574805AB64F569A5488F1728 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -157,6 +179,7 @@
 			children = (
 				48B3F9820103BE684545D7C4 /* Wololo.app */,
 				B8C266D4F3E1F835C63E18BA /* WololoShareExtension.appex */,
+				C36A2E6AF26B06C7294DF092 /* WololoTests.xctest */,
 				4F04BF6DDC99BC06D3292814 /* WololoUITests.xctest */,
 			);
 			name = Products;
@@ -171,6 +194,15 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		6090A5BF49B724B1A21CFFA9 /* WololoUnitTests */ = {
+			isa = PBXGroup;
+			children = (
+				55FDC303DBAF8E09A94263E5 /* MediaSaverTests.swift */,
+				BDDC2F87F94CCC5C0EBFC572 /* Fixtures */,
+			);
+			path = WololoUnitTests;
+			sourceTree = "<group>";
+		};
 		7BF9FA0557CBAAEBDD512C1A /* Features */ = {
 			isa = PBXGroup;
 			children = (
@@ -178,6 +210,14 @@
 				B7E3FF45363478BE60F92DB8 /* SettingsView.swift */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		BDDC2F87F94CCC5C0EBFC572 /* Fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				D68131AAEDF917FD2F9735AF /* video.mp4 */,
+			);
+			path = Fixtures;
 			sourceTree = "<group>";
 		};
 		E0D8EA70B0BEB48770457BF2 /* WololoShareExtension */ = {
@@ -268,6 +308,27 @@
 			productReference = B8C266D4F3E1F835C63E18BA /* WololoShareExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		CCE93E015F495FE62181F897 /* WololoTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A425B0A640C5BE85C4AB6A53 /* Build configuration list for PBXNativeTarget "WololoTests" */;
+			buildPhases = (
+				BAC341E7041E445E497600D2 /* Sources */,
+				3E66C69E0164CEC6966F99FE /* Resources */,
+				BA6B28390A19B44D3ED94238 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				932E8DB9AD3036A9C1AF5097 /* PBXTargetDependency */,
+			);
+			name = WololoTests;
+			packageProductDependencies = (
+				067D37CF9BDBEB9AA2EB220A /* WololoKit */,
+			);
+			productName = WololoTests;
+			productReference = C36A2E6AF26B06C7294DF092 /* WololoTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -287,6 +348,10 @@
 						TestTargetID = 0FF803F0E381CB311DF21F1B;
 					};
 					74B4A170E970C4367DF34411 = {
+						DevelopmentTeam = 5T3LZC3A68;
+						ProvisioningStyle = Automatic;
+					};
+					CCE93E015F495FE62181F897 = {
 						DevelopmentTeam = 5T3LZC3A68;
 						ProvisioningStyle = Automatic;
 					};
@@ -311,6 +376,7 @@
 			targets = (
 				0FF803F0E381CB311DF21F1B /* Wololo */,
 				74B4A170E970C4367DF34411 /* WololoShareExtension */,
+				CCE93E015F495FE62181F897 /* WololoTests */,
 				101493FA8468B594E837BCE5 /* WololoUITests */,
 			);
 		};
@@ -324,6 +390,14 @@
 				FB67C7535961784150F21B1E /* Assets.xcassets in Resources */,
 				A9A6D3A9346B9DC68E0CCE86 /* Localizable.strings in Resources */,
 				2FACCAC25C70E7F8CB3C5E77 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3E66C69E0164CEC6966F99FE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C35422B470D1E958C650F286 /* video.mp4 in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -378,6 +452,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BAC341E7041E445E497600D2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A69B80A136338AF8888CC032 /* MediaSaverTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -390,6 +472,11 @@
 			isa = PBXTargetDependency;
 			target = 74B4A170E970C4367DF34411 /* WololoShareExtension */;
 			targetProxy = EBED0B40C7A6AF8ECCEB1370 /* PBXContainerItemProxy */;
+		};
+		932E8DB9AD3036A9C1AF5097 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 0FF803F0E381CB311DF21F1B /* Wololo */;
+			targetProxy = 7AE70F05FAFF830DFB685C2C /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -405,6 +492,42 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		0C0AD8C682331C59C80FC280 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.edilson.wololo.tests;
+				SDKROOT = iphoneos;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Wololo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Wololo";
+			};
+			name = Debug;
+		};
+		4E16B88F0D4328A0CAA8E873 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = dev.edilson.wololo.tests;
+				SDKROOT = iphoneos;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Wololo.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Wololo";
+			};
+			name = Release;
+		};
 		5946DC1F69A93676BA799D92 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -440,7 +563,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 5T3LZC3A68;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -586,7 +709,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 5T3LZC3A68;
@@ -676,6 +799,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
 		};
+		A425B0A640C5BE85C4AB6A53 /* Build configuration list for PBXNativeTarget "WololoTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0C0AD8C682331C59C80FC280 /* Debug */,
+				4E16B88F0D4328A0CAA8E873 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		BF32670D988F9CD000402A67 /* Build configuration list for PBXNativeTarget "WololoUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -704,6 +836,10 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		067D37CF9BDBEB9AA2EB220A /* WololoKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = WololoKit;
+		};
 		229AD6742C5C93AFCD4D8B1A /* WololoKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = WololoKit;
