@@ -29,8 +29,9 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      # Repo root, so the build can bundle CHANGELOG.md (see .dockerignore)
+      context: .
+      dockerfile: frontend/Dockerfile
     container_name: wololo-frontend
     restart: unless-stopped
     ports:

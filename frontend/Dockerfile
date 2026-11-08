@@ -5,14 +5,17 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Build context is the repository root (see docker-compose.yml)
 # Copy package files
-COPY package.json ./
+COPY frontend/package.json ./
 
 # Install dependencies
 RUN npm install
 
-# Copy source code
-COPY . .
+# Copy source code, plus the changelog shown in the release notes modal
+# (imported as ../../CHANGELOG.md from src/)
+COPY frontend/ .
+COPY CHANGELOG.md /CHANGELOG.md
 
 # Build the application
 RUN npm run build
@@ -21,7 +24,7 @@ RUN npm run build
 FROM nginx:alpine
 
 # Copy custom nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built files from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html

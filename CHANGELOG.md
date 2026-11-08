@@ -3,6 +3,18 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-11-08
+
+### Added
+
+- Click the version in the footer to open the release notes: every version
+  with what was added, changed and fixed, read straight from `CHANGELOG.md`.
+
+### Changed
+
+- The frontend Docker image is built from the repository root so it can
+  bundle the changelog; a root `.dockerignore` keeps the build context small.
+
 ## [0.7.0] - 2026-11-08
 
 ### Added

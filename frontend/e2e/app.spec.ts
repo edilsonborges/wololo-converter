@@ -90,4 +90,19 @@ test.describe('Wololo Converter App', () => {
   test('should show footer with disclaimer', async ({ page }) => {
     await expect(page.getByText(/Personal use only/)).toBeVisible()
   })
+
+  test('should open release notes from the footer version', async ({ page }) => {
+    const version = page.locator('footer button', { hasText: /^v\d+\.\d+\.\d+$/ })
+    const label = (await version.textContent())!.trim()
+    await version.click()
+
+    const dialog = page.getByRole('dialog', { name: 'Release notes' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: label })).toBeVisible()
+    await expect(dialog.getByText('Current', { exact: true })).toBeVisible()
+    await expect(dialog.getByRole('heading', { name: 'v0.1.0' })).toBeAttached()
+
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+  })
 })

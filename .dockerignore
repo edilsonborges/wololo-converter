@@ -1,0 +1,9 @@
+# Only the frontend image is built from the repository root; send it just
+# the frontend sources and the changelog.
+*
+!frontend
+!CHANGELOG.md
+frontend/node_modules
+frontend/dist
+frontend/test-results
+frontend/playwright-report

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { MultiURLInput, QueueManager, QualitySelector, VideoPreview, Icon, type ParsedURL } from './components';
+import { MultiURLInput, QueueManager, QualitySelector, VideoPreview, Icon, ReleaseNotesModal, type ParsedURL } from './components';
+import { getReleases } from './changelog';
 import { useQueueManager } from './hooks/useQueueManager';
 import { api } from './api';
 import type { VideoQuality, PreviewResponse } from './types';
@@ -11,6 +12,8 @@ function App() {
   const [parsedUrls, setParsedUrls] = useState<ParsedURL[]>([]);
   const [selectedQuality, setSelectedQuality] = useState<VideoQuality>('480p');
   const [resetTrigger, setResetTrigger] = useState(0);
+  const [showReleaseNotes, setShowReleaseNotes] = useState(false);
+  const closeReleaseNotes = useCallback(() => setShowReleaseNotes(false), []);
 
   // Preview state
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
@@ -243,8 +246,23 @@ function App() {
       {/* Footer */}
       <footer className="py-6 px-4 text-center text-text-muted text-sm border-t border-border-light">
         <p>Personal use only. Respect copyright and platform terms of service.</p>
-        <p className="mt-1 text-text-muted/50 text-xs">v{packageJson.version}</p>
+        <button
+          type="button"
+          onClick={() => setShowReleaseNotes(true)}
+          className="mt-1 text-text-muted/60 text-xs underline-offset-2 hover:text-accent hover:underline transition-colors"
+          title="See what changed in each version"
+        >
+          v{packageJson.version}
+        </button>
       </footer>
+
+      {showReleaseNotes && (
+        <ReleaseNotesModal
+          releases={getReleases()}
+          currentVersion={packageJson.version}
+          onClose={closeReleaseNotes}
+        />
+      )}
     </div>
   );
 }
