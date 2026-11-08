@@ -69,6 +69,7 @@ fun DownloadForm(repository: DownloadRepository, initialText: String = "", onEnq
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(text, onValueChange = { text = it; error = null }, modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
             label = { Text(stringResource(R.string.paste_link)) }, minLines = 2, maxLines = 4,
             trailingIcon = { TextButton(onClick = {
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -81,7 +82,7 @@ fun DownloadForm(repository: DownloadRepository, initialText: String = "", onEnq
         }
         if (quality != "mp3") QualityChoices(quality) { videoQuality = it; quality = it }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-        Button(onClick = begin, enabled = !busy && text.isNotBlank(), modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
+        Button(onClick = begin, enabled = !busy && text.isNotBlank(), shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
             Text(stringResource(if (busy) R.string.enqueueing else if (quality == "mp3") R.string.save_audio else R.string.save_video))
         }
     }

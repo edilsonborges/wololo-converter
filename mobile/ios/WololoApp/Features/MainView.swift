@@ -10,65 +10,111 @@ struct MainView: View {
     var body: some View {
         TabView {
             NavigationStack {
-                List {
-                    Section {
-                        TextField(L("Paste a video link"), text: $text, axis: .vertical)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .keyboardType(.URL)
-                            .lineLimit(2...4)
-                            .accessibilityIdentifier("download.url")
-                            .focused($isEditingLink)
-                        Picker(L("Format"), selection: $model.settings.format) {
-                            ForEach(DownloadFormat.allCases) { format in
-                                Text(format.title).tag(format)
-                            }
-                        }.pickerStyle(.segmented)
-                        if model.settings.format == .mp4 {
-                            Picker(L("Video quality"), selection: $model.settings.videoQuality) {
-                                ForEach(VideoQuality.videoOptions) { Text($0.rawValue).tag($0) }
+                ScrollView {
+                    VStack(spacing: 20) {
+                        WololoBrandHeader().padding(.vertical, 8)
+                        WololoCard {
+                            VStack(alignment: .leading, spacing: 16) {
+                                TextField(L("Paste a video link"), text: $text, axis: .vertical)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .keyboardType(.URL)
+                                    .lineLimit(3...5)
+                                    .font(.subheadline)
+                                    .padding(14)
+                                    .background(WololoPalette.subtle, in: RoundedRectangle(cornerRadius: 10))
+                                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(WololoPalette.border, lineWidth: 1))
+                                    .accessibilityIdentifier("download.url")
+                                    .focused($isEditingLink)
+                                Picker(L("Format"), selection: $model.settings.format) {
+                                    ForEach(DownloadFormat.allCases) { format in
+                                        Text(format.title).tag(format)
+                                    }
+                                }.pickerStyle(.segmented)
+                                if model.settings.format == .mp4 {
+                                    HStack {
+                                        Text(L("Video quality")).font(.subheadline)
+                                        Spacer()
+                                        Picker(L("Video quality"), selection: $model.settings.videoQuality) {
+                                            ForEach(VideoQuality.videoOptions) { Text($0.rawValue).tag($0) }
+                                        }.pickerStyle(.menu)
+                                    }
+                                }
+                                Button {
+                                    isEditingLink = false
+                                    Task {
+                                        if await model.submit(text: text) != nil { text = "" }
+                                    }
+                                } label: {
+                                    HStack {
+                                        if model.isSubmitting { ProgressView() }
+                                        Label(L("Download"), systemImage: "arrow.down")
+                                    }
+                                }
+                                .buttonStyle(WololoPrimaryButtonStyle())
+                                .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isSubmitting)
+                                .accessibilityIdentifier("download.start")
                             }
                         }
-                        Button {
-                            isEditingLink = false
-                            Task {
-                                if await model.submit(text: text) != nil { text = "" }
-                            }
-                        } label: {
-                            HStack {
-                                if model.isSubmitting { ProgressView() }
-                                Label(L("Download"), systemImage: "arrow.down.circle.fill")
-                            }.frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isSubmitting)
-                        .accessibilityIdentifier("download.start")
-                    } footer: {
                         Text(L("You can also share a link to Wololo from another app."))
-                    }
-                    if let error = model.errorMessage {
-                        Section {
-                            Text(error).foregroundStyle(.red)
-                            Button(L("Dismiss")) { model.errorMessage = nil }
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 8)
+                        if let error = model.errorMessage {
+                            WololoCard {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Label(error, systemImage: "exclamationmark.circle")
+                                        .font(.subheadline)
+                                    Button(L("Dismiss")) { model.errorMessage = nil }
+                                        .font(.subheadline.weight(.semibold))
+                                }
+                            }
+                        }
+                        WololoCard {
+                            VStack(alignment: .leading, spacing: 16) {
+                                if model.entries.isEmpty {
+                                    VStack(spacing: 12) {
+                                        Image(systemName: "tray")
+                                            .font(.title2)
+                                            .foregroundStyle(.secondary)
+                                            .padding(16)
+                                            .background(WololoPalette.muted, in: Circle())
+                                        Text(L("Your download queue is empty"))
+                                            .font(.headline)
+                                        Text(L("Your downloads will appear here."))
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .multilineTextAlignment(.center)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 24)
+                                } else {
+                                    Text(L("Downloads"))
+                                        .font(.headline)
+                                        .accessibilityAddTraits(.isHeader)
+                                    ForEach(model.entries) { entry in
+                                        DownloadRow(entry: entry, model: model)
+                                        if entry.id != model.entries.last?.id { Divider() }
+                                    }
+                                }
+                            }
                         }
                     }
-                    Section(L("Downloads")) {
-                        if model.entries.isEmpty {
-                            ContentUnavailableView(L("Ready when you are"), systemImage: "arrow.down.to.line",
-                                description: Text(L("Your downloads will appear here.")))
-                        }
-                        ForEach(model.entries) { entry in
-                            DownloadRow(entry: entry, model: model)
-                        }
-                    }
+                    .frame(maxWidth: 600)
+                    .padding(20)
+                    .frame(maxWidth: .infinity)
                 }
-                .navigationTitle("Wololo")
+                .background(.white)
+                .toolbar(.hidden, for: .navigationBar)
                 .refreshable { model.refreshAndResume() }
             }
             .tabItem { Label(L("Downloads"), systemImage: "arrow.down.circle") }
             NavigationStack { SettingsView(model: model) }
                 .tabItem { Label(L("Settings"), systemImage: "gearshape") }
         }
+        .toolbarBackground(.white, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             while !Task.isCancelled {
@@ -96,12 +142,15 @@ struct DownloadRow: View {
                 Text(entry.format.title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
             }
             Text(statusTitle(entry.status)).font(.subheadline).foregroundStyle(.secondary)
-            if let error = entry.errorMessage { Text(error).font(.caption).foregroundStyle(.red) }
+            if let error = entry.errorMessage {
+                Label(error, systemImage: "exclamationmark.circle").font(.caption)
+            }
             if [.queued, .processing, .transferring].contains(entry.status) {
                 ProgressView(value: min(max(entry.progress, 0), 100), total: 100)
                     .accessibilityLabel(L("Download progress"))
                 Button(L("Cancel"), role: .destructive) { Task { await model.cancel(entry) } }
                     .buttonStyle(.borderless)
+                    .foregroundStyle(WololoPalette.ink)
             }
             if entry.status == .readyToSave {
                 Button(L("Save")) { model.save(entry) }.buttonStyle(.bordered)

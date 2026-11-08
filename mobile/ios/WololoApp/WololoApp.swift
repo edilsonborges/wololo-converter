@@ -10,7 +10,9 @@ struct WololoApp: App {
     var body: some Scene {
         WindowGroup {
             MainView(model: delegate.model)
-                .tint(Color(red: 0.91, green: 0.36, blue: 0.14))
+                .tint(.black)
+                .foregroundStyle(WololoPalette.ink)
+                .preferredColorScheme(.light)
                 .task {
                     _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
                 }

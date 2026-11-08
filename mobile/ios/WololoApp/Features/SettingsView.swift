@@ -20,6 +20,7 @@ struct SettingsView: View {
                 Button(L("Test connection")) { Task { await model.checkConnection() } }
                 if let result = model.connectionMessage { Text(result).font(.footnote) }
             }
+            .listRowBackground(WololoPalette.subtle)
             Section(L("Download preferences")) {
                 Picker(L("Default format"), selection: $model.settings.format) {
                     ForEach(DownloadFormat.allCases) { Text($0.title).tag($0) }
@@ -28,6 +29,7 @@ struct SettingsView: View {
                     ForEach(VideoQuality.videoOptions) { Text($0.rawValue).tag($0) }
                 }
             }
+            .listRowBackground(WololoPalette.subtle)
             Section {
                 Text(L("Videos are saved to Photos. Audio is saved to Files, under On My iPhone / Wololo."))
                     .font(.footnote)
@@ -35,10 +37,16 @@ struct SettingsView: View {
                     .font(.footnote).foregroundStyle(.secondary)
                 LabeledContent(L("Version"), value: AppConstants.appVersion)
             }
-            if saved { Text(L("Settings saved")).foregroundStyle(.green) }
-            if let error = model.errorMessage { Text(error).foregroundStyle(.red) }
+            .listRowBackground(WololoPalette.subtle)
+            if saved { Label(L("Settings saved"), systemImage: "checkmark.circle") }
+            if let error = model.errorMessage { Label(error, systemImage: "exclamationmark.circle") }
         }
+        .scrollContentBackground(.hidden)
+        .background(.white)
+        .foregroundStyle(WololoPalette.ink)
         .navigationTitle(L("Settings"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.white, for: .navigationBar)
         .toolbar {
             Button(L("Save")) {
                 do { try model.saveSettings(); saved = true; model.errorMessage = nil }

@@ -5,6 +5,9 @@ Dono: Edilson (fala português; interface do produto é em inglês)
 
 ## Atualização de implementação em 2026-11-08
 
+- Correção pós-teste: o build iOS 2 remove o crash ao salvar MP4 em Fotos, causado por uma closure que herdava MainActor e era executada na fila privada de Photos. O teste Release `WololoTests` reproduziu o crash antes e passou após a correção.
+- Preferência visual explícita do dono: usar o mascote vermelho original do site como ícone, com interface branca e preta. Não usar o W laranja nem a paleta verde. O build iOS 3 e Android 1.0.1 aplicam essa identidade.
+
 - O ambiente atual tem macOS 26.7.2, Xcode 26.2, Android SDK 35/36 e JDK 21 do Android Studio. O diagnóstico antigo de Monterey está superado neste Mac.
 - O dono aprovou GitHub Actions, os IDs `dev.edilson.wololo`, `dev.edilson.wololo.share` e `group.dev.edilson.wololo`, além de push, release e envio ao TestFlight.
 - O Marco 1 está implementado, com fila de 3 ativos e 20 aguardando, autenticação opcional por chave e `min_app_version` configurável. A versão padrão mínima dos apps é 1.0.0.

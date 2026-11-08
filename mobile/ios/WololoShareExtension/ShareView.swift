@@ -14,65 +14,79 @@ struct ShareView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    if let entry = active {
-                        Text(entry.title ?? L("Your download")).font(.title2.bold()).lineLimit(3)
-                        Text(statusTitle(entry.status)).foregroundStyle(.secondary)
-                        if let error = entry.errorMessage { Text(error).foregroundStyle(.red) }
-                        if [.queued, .processing, .transferring].contains(entry.status) {
-                            ProgressView(value: min(max(entry.progress, 0), 100), total: 100)
-                            Text(L("Keep this sheet open while the server prepares your file. If you close it now, open Wololo to resume."))
-                                .font(.footnote).foregroundStyle(.secondary)
-                            Button(L("Cancel download"), role: .destructive) {
-                                Task { await model.cancel(entry) }
-                            }
-                        }
-                        if entry.status == .readyToSave {
-                            if entry.format == .mp3 {
-                                Button(L("Save to Files")) { export = entry }
-                                    .buttonStyle(.borderedProminent)
+                VStack(spacing: 20) {
+                    WololoBrandHeader(compact: true)
+                    WololoCard {
+                        VStack(alignment: .leading, spacing: 20) {
+                            if let entry = active {
+                                Text(entry.title ?? L("Your download")).font(.title2.bold()).lineLimit(3)
+                                Text(statusTitle(entry.status)).foregroundStyle(.secondary)
+                                if let error = entry.errorMessage { Label(error, systemImage: "exclamationmark.circle") }
+                                if [.queued, .processing, .transferring].contains(entry.status) {
+                                    ProgressView(value: min(max(entry.progress, 0), 100), total: 100)
+                                    Text(L("Keep this sheet open while the server prepares your file. If you close it now, open Wololo to resume."))
+                                        .font(.footnote).foregroundStyle(.secondary)
+                                    Button(L("Cancel download"), role: .destructive) {
+                                        Task { await model.cancel(entry) }
+                                    }.foregroundStyle(WololoPalette.ink)
+                                }
+                                if entry.status == .readyToSave {
+                                    if entry.format == .mp3 {
+                                        Button(L("Save to Files")) { export = entry }
+                                            .buttonStyle(WololoPrimaryButtonStyle())
+                                    } else {
+                                        Button(L("Save to Photos")) { model.save(entry) }
+                                            .buttonStyle(WololoPrimaryButtonStyle())
+                                    }
+                                }
+                                if entry.status == .saved {
+                                    Label(L("Saved"), systemImage: "checkmark.circle.fill")
+                                }
+                                if entry.status == .failed || entry.status == .cancelled {
+                                    Button(L("Try again")) { activeID = nil }
+                                }
                             } else {
-                                Button(L("Save to Photos")) { model.save(entry) }
-                                    .buttonStyle(.borderedProminent)
+                                Text(L("Save this moment")).font(.title2.bold())
+                                Text(LinkParser.firstSupportedLink(in: sharedText)?.url.absoluteString ?? L("Share a supported video link to get started."))
+                                    .font(.subheadline).foregroundStyle(.secondary).lineLimit(3)
+                                Picker(L("Format"), selection: $model.settings.format) {
+                                    ForEach(DownloadFormat.allCases) { Text($0.title).tag($0) }
+                                }.pickerStyle(.segmented)
+                                if model.settings.format == .mp4 {
+                                    Picker(L("Video quality"), selection: $model.settings.videoQuality) {
+                                        ForEach(VideoQuality.videoOptions) { Text($0.rawValue).tag($0) }
+                                    }
+                                }
+                                Button {
+                                    Task { activeID = await model.submit(text: sharedText) }
+                                } label: {
+                                    HStack {
+                                        if model.isSubmitting { ProgressView() }
+                                        Text(L("Download"))
+                                    }.frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(WololoPrimaryButtonStyle())
+                                .disabled(model.isSubmitting || LinkParser.firstSupportedLink(in: sharedText) == nil)
+                            }
+                            if let error = model.errorMessage {
+                                Label(error, systemImage: "exclamationmark.circle").font(.footnote)
                             }
                         }
-                        if entry.status == .saved {
-                            Label(L("Saved"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                        }
-                        if entry.status == .failed || entry.status == .cancelled {
-                            Button(L("Try again")) { activeID = nil }
-                        }
-                    } else {
-                        Text(L("Save this moment")).font(.largeTitle.bold())
-                        Text(LinkParser.firstSupportedLink(in: sharedText)?.url.absoluteString ?? L("Share a supported video link to get started."))
-                            .font(.subheadline).foregroundStyle(.secondary).lineLimit(3)
-                        Picker(L("Format"), selection: $model.settings.format) {
-                            ForEach(DownloadFormat.allCases) { Text($0.title).tag($0) }
-                        }.pickerStyle(.segmented)
-                        if model.settings.format == .mp4 {
-                            Picker(L("Video quality"), selection: $model.settings.videoQuality) {
-                                ForEach(VideoQuality.videoOptions) { Text($0.rawValue).tag($0) }
-                            }
-                        }
-                        Button {
-                            Task { activeID = await model.submit(text: sharedText) }
-                        } label: {
-                            HStack {
-                                if model.isSubmitting { ProgressView() }
-                                Text(L("Download"))
-                            }.frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(model.isSubmitting || LinkParser.firstSupportedLink(in: sharedText) == nil)
                     }
-                    if let error = model.errorMessage { Text(error).font(.footnote).foregroundStyle(.red) }
-                }.padding(24)
+                }
+                .frame(maxWidth: 600)
+                .padding(20)
+                .frame(maxWidth: .infinity)
             }
-            .navigationTitle("Wololo")
+            .background(.white)
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button(L("Done"), action: finish) } }
-            .tint(Color(red: 0.91, green: 0.36, blue: 0.14))
+            .toolbarBackground(.white, for: .navigationBar)
         }
+        .tint(.black)
+        .foregroundStyle(WololoPalette.ink)
+        .preferredColorScheme(.light)
         .task {
             while !Task.isCancelled {
                 model.reload()

@@ -28,7 +28,9 @@ fun WololoScreen(repository: DownloadRepository) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     Scaffold(topBar = {
-        TopAppBar(title = { Text(stringResource(if (showSettings) R.string.settings else R.string.app_name)) }, actions = {
+        TopAppBar(title = {
+            if (showSettings) Text(stringResource(R.string.settings)) else WololoBrand()
+        }, actions = {
             TextButton(onClick = { showSettings = !showSettings }) {
                 Text(stringResource(if (showSettings) R.string.close else R.string.settings))
             }
@@ -36,7 +38,7 @@ fun WololoScreen(repository: DownloadRepository) {
     }) { insets ->
         if (showSettings) SettingsScreen(repository, Modifier.padding(insets))
         else LazyColumn(Modifier.fillMaxSize().padding(insets), contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(24.dp)) {
-            item { Text(stringResource(R.string.save_media), style = MaterialTheme.typography.headlineLarge) }
+            item { Text(stringResource(R.string.supported_sources), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             item { DownloadForm(repository, onEnqueued = { Toast.makeText(context, R.string.queued_message, Toast.LENGTH_SHORT).show() }) }
             item { Text(stringResource(R.string.use_responsibly), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             item { HorizontalDivider(); Spacer(Modifier.height(24.dp)); Text(stringResource(R.string.history), style = MaterialTheme.typography.titleLarge) }

@@ -3,6 +3,13 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.9.2] - 2026-11-08
+
+### Changed
+
+- Use the original red Wololo mascot for the iOS and Android app icons.
+- Match the native apps to the website with white backgrounds, black actions, and neutral borders.
+
 ## [0.9.1] - 2026-11-08
 
 ### Fixed

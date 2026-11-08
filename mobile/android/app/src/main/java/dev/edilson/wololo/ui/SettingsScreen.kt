@@ -61,7 +61,7 @@ fun SettingsScreen(repository: DownloadRepository, modifier: Modifier = Modifier
                 } catch (error: Exception) { message = error.message }
                 finally { busy = false }
             }
-        }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.save_settings)) }
+        }, enabled = !busy, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.save_settings)) }
         OutlinedButton(onClick = {
             scope.launch {
                 busy = true
@@ -73,7 +73,7 @@ fun SettingsScreen(repository: DownloadRepository, modifier: Modifier = Modifier
                 } catch (error: Exception) { message = error.message }
                 finally { busy = false }
             }
-        }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.test_connection)) }
+        }, enabled = !busy, shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.test_connection)) }
         message?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
         Text(stringResource(R.string.private_history), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(stringResource(R.string.version, BuildConfig.VERSION_NAME), style = MaterialTheme.typography.labelMedium)

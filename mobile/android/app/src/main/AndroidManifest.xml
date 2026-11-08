@@ -16,7 +16,7 @@
             <data android:mimeType="audio/mpeg" />
         </intent>
     </queries>
-    <application android:name=".WololoApplication" android:label="@string/app_name" android:icon="@drawable/ic_wololo"
+    <application android:name=".WololoApplication" android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher"
         android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:supportsRtl="true" android:theme="@style/Theme.Wololo" android:usesCleartextTraffic="false">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>

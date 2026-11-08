@@ -22,10 +22,13 @@
 		6A2A9949C5D1A173B7DB45AB /* WololoKit in Frameworks */ = {isa = PBXBuildFile; productRef = 067D37CF9BDBEB9AA2EB220A /* WololoKit */; };
 		72F092B901CC55669406CFCE /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4681A56AF7271210FE5B3133 /* AppModel.swift */; };
 		7484EDEFC3B5ABD3346A1DC5 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 186E95A7CF92B94895210ADC /* ShareViewController.swift */; };
+		7626A1C2E52219ACA4314FBC /* Brand.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7628AA900BFAFC0CE3417466 /* Brand.xcassets */; };
+		78CFA65A3121646A22C6B009 /* Brand.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 7628AA900BFAFC0CE3417466 /* Brand.xcassets */; };
 		79C4F9D111D10CD5E7BF698F /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFF474235F6898B074AB88A7 /* Localization.swift */; };
 		7EAF439182F7FDBC4156C3FE /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = FFF474235F6898B074AB88A7 /* Localization.swift */; };
 		80A6DD78AD400C6CD2599EBD /* ProcessOwnership.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7DB7D0D5CB46C008B49490B /* ProcessOwnership.swift */; };
 		8E6BD54465745CB85686981D /* MediaSaver.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5F167409F3ACF431A05CF0F /* MediaSaver.swift */; };
+		9E358D256E37FD79FBA16512 /* WololoTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68A743014C9DA3448572301B /* WololoTheme.swift */; };
 		9FFB8C7E593CE8811C800C17 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = D6687869CA79C23CD204CD0A /* Localizable.strings */; };
 		A69B80A136338AF8888CC032 /* MediaSaverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55FDC303DBAF8E09A94263E5 /* MediaSaverTests.swift */; };
 		A9A6D3A9346B9DC68E0CCE86 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = D6687869CA79C23CD204CD0A /* Localizable.strings */; };
@@ -33,6 +36,7 @@
 		BEFCA1316691F95F4D32474F /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E3FF45363478BE60F92DB8 /* SettingsView.swift */; };
 		C35422B470D1E958C650F286 /* video.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = D68131AAEDF917FD2F9735AF /* video.mp4 */; };
 		E3813A828A08A42BDFECD8FE /* ProcessOwnership.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7DB7D0D5CB46C008B49490B /* ProcessOwnership.swift */; };
+		E670ED99BC98EAB6F8B96DE8 /* WololoTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68A743014C9DA3448572301B /* WololoTheme.swift */; };
 		FB67C7535961784150F21B1E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2AA42AC8F84F248BDDACEBF9 /* Assets.xcassets */; };
 		FDCE62E9356F7C1582BD9BA5 /* WololoKit in Frameworks */ = {isa = PBXBuildFile; productRef = 7D39A51BABE68DBF8E26775E /* WololoKit */; };
 		FE871853358BF233622B1B52 /* LaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B424CD010EBCD7F042B9249 /* LaunchTests.swift */; };
@@ -89,6 +93,8 @@
 		4F04BF6DDC99BC06D3292814 /* WololoUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = WololoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		55FDC303DBAF8E09A94263E5 /* MediaSaverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaSaverTests.swift; sourceTree = "<group>"; };
 		689C2FB70A5650A3447E8D37 /* StatusTitle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusTitle.swift; sourceTree = "<group>"; };
+		68A743014C9DA3448572301B /* WololoTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WololoTheme.swift; sourceTree = "<group>"; };
+		7628AA900BFAFC0CE3417466 /* Brand.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Brand.xcassets; sourceTree = "<group>"; };
 		8B424CD010EBCD7F042B9249 /* LaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchTests.swift; sourceTree = "<group>"; };
 		98322E8058A72E625E9D38F7 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		B7E3FF45363478BE60F92DB8 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -162,6 +168,7 @@
 				F5F167409F3ACF431A05CF0F /* MediaSaver.swift */,
 				C7DB7D0D5CB46C008B49490B /* ProcessOwnership.swift */,
 				689C2FB70A5650A3447E8D37 /* StatusTitle.swift */,
+				68A743014C9DA3448572301B /* WololoTheme.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -188,6 +195,7 @@
 		5F4657F37129AB10B7D3B35B /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				7628AA900BFAFC0CE3417466 /* Brand.xcassets */,
 				98322E8058A72E625E9D38F7 /* PrivacyInfo.xcprivacy */,
 				D6687869CA79C23CD204CD0A /* Localizable.strings */,
 			);
@@ -388,6 +396,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				FB67C7535961784150F21B1E /* Assets.xcassets in Resources */,
+				7626A1C2E52219ACA4314FBC /* Brand.xcassets in Resources */,
 				A9A6D3A9346B9DC68E0CCE86 /* Localizable.strings in Resources */,
 				2FACCAC25C70E7F8CB3C5E77 /* PrivacyInfo.xcprivacy in Resources */,
 			);
@@ -405,6 +414,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				78CFA65A3121646A22C6B009 /* Brand.xcassets in Resources */,
 				9FFB8C7E593CE8811C800C17 /* Localizable.strings in Resources */,
 				15D7F3A6B8A4AB3E84B2AB4B /* PrivacyInfo.xcprivacy in Resources */,
 			);
@@ -426,6 +436,7 @@
 				BEFCA1316691F95F4D32474F /* SettingsView.swift in Sources */,
 				43A635B9E7F98DECB951E1F7 /* StatusTitle.swift in Sources */,
 				A9B32671B4A7D3E6217350C4 /* WololoApp.swift in Sources */,
+				E670ED99BC98EAB6F8B96DE8 /* WololoTheme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -441,6 +452,7 @@
 				674F5C909A3C380FE9BB0F24 /* ShareView.swift in Sources */,
 				7484EDEFC3B5ABD3346A1DC5 /* ShareViewController.swift in Sources */,
 				3DE740448ECEB0491CDF51A6 /* StatusTitle.swift in Sources */,
+				9E358D256E37FD79FBA16512 /* WololoTheme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -563,7 +575,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 5T3LZC3A68;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -709,7 +721,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 5T3LZC3A68;

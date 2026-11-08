@@ -20,6 +20,7 @@ import dev.edilson.wololo.R
 import dev.edilson.wololo.WololoApplication
 import dev.edilson.wololo.ui.DownloadForm
 import dev.edilson.wololo.ui.WololoTheme
+import dev.edilson.wololo.ui.WololoBrand
 
 class ShareActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,7 +33,7 @@ class ShareActivity : ComponentActivity() {
                     Surface(shape = MaterialTheme.shapes.extraLarge) {
                         Column(Modifier.navigationBarsPadding().padding(24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text(stringResource(R.string.shared_link), Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
+                                WololoBrand(Modifier.weight(1f))
                                 TextButton(onClick = { finish() }) { Text(stringResource(R.string.close)) }
                             }
                             DownloadForm(repository, initialText = text, onEnqueued = {

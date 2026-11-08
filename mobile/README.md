@@ -13,6 +13,12 @@ Apps nativos para iOS 17+ e Android 8+. A interface fica em inglês.
 | App Store Connect Apple ID | `6832327047` |
 | App Store Connect SKU | `wololo-ios` |
 
+## Identidade visual
+
+O visual segue o site: fundo branco, textos e botões pretos, superfícies e bordas cinza. A aparência clara é intencional, inclusive quando o aparelho usa modo escuro. O mascote vermelho original de `frontend/public/wololo-left.png` aparece nos ícones e nos cabeçalhos.
+
+O ícone compartilhado está em `mobile/branding/app-icon.png`. Para reexportar o PNG opaco de 1024 pixels e o AppIcon iOS preservando a arte original, execute `swift mobile/scripts/export-app-icon.swift` na raiz do repositório. O Android contém suas cópias para os ícones de launcher.
+
 ## Build local
 
 O projeto Xcode contém o app, a extensão e o pacote local WololoKit.

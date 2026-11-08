@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">Wololo</string>
+    <string name="brand_name">Wololo Converter</string>
+    <string name="supported_sources">Download videos from YouTube, Instagram, TikTok, Threads and Twitter/X.</string>
     <string name="downloads">Downloads</string>
     <string name="downloading">Downloading</string>
     <string name="saved">Saved to your library</string>
@@ -7,7 +9,6 @@
     <string name="cancel">Cancel</string>
     <string name="close">Close</string>
     <string name="settings">Settings</string>
-    <string name="save_media">Save something worth keeping.</string>
     <string name="paste_link">Paste a video link</string>
     <string name="paste">Paste</string>
     <string name="save_video">Save video</string>
@@ -42,7 +43,6 @@
     <string name="interrupted">This download was interrupted. Please try again.</string>
     <string name="no_matches">No downloadable tracks were found.</string>
     <string name="tracks_queued">%1$d queued · %2$d unavailable.</string>
-    <string name="shared_link">Save with Wololo</string>
     <string name="share_hint">Your download continues after you close this sheet.</string>
     <string name="queued_message">Added to downloads.</string>
     <string name="queued">Waiting</string>
