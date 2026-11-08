@@ -243,3 +243,23 @@ class TestFormatDuration:
 
     def test_zero(self):
         assert format_duration(0) == "00:00"
+
+
+class TestCleanupOldFiles:
+    async def test_cleanup_skips_active_jobs(self, monkeypatch, tmp_path):
+        import os
+        from app import utils
+
+        monkeypatch.setattr(utils.settings, "temp_dir", tmp_path)
+        monkeypatch.setattr(utils.settings, "max_file_age_hours", 1)
+        old, active = tmp_path / "old-job", tmp_path / "active-job"
+        for d in (old, active):
+            d.mkdir()
+            (d / "file.part").write_bytes(b"x")
+            os.utime(d, (0, 0))
+
+        cleaned = await utils.cleanup_old_files({"active-job"})
+
+        assert cleaned == 1
+        assert not old.exists()
+        assert active.exists()

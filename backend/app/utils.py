@@ -182,10 +182,16 @@ def get_directory_size(path: Path) -> int:
     return total
 
 
-async def cleanup_old_files() -> int:
-    """Clean up files older than max_file_age_hours. Returns number of files cleaned."""
+async def cleanup_old_files(active_job_ids: Optional[set[str]] = None) -> int:
+    """Clean up job directories older than max_file_age_hours.
+
+    Directories of jobs still running are skipped: a directory's mtime does not
+    change while yt-dlp grows a .part file, so long downloads would otherwise be
+    deleted mid-flight. Returns number of directories cleaned.
+    """
     import time
-    from datetime import timedelta
+
+    active_job_ids = active_job_ids or set()
 
     cleaned = 0
     max_age_seconds = settings.max_file_age_hours * 3600
@@ -195,7 +201,7 @@ async def cleanup_old_files() -> int:
         return 0
 
     for job_dir in settings.temp_dir.iterdir():
-        if not job_dir.is_dir():
+        if not job_dir.is_dir() or job_dir.name in active_job_ids:
             continue
 
         try:
@@ -215,7 +221,10 @@ async def run_cleanup_task():
     while True:
         try:
             await asyncio.sleep(settings.cleanup_interval_minutes * 60)
-            cleaned = await cleanup_old_files()
+            # Lazy import: download_service imports this module
+            from .download_service import download_service
+
+            cleaned = await cleanup_old_files(set(download_service.active_jobs))
             if cleaned > 0:
                 print(f"Cleaned up {cleaned} old job directories")
         except asyncio.CancelledError:

@@ -1,7 +1,8 @@
 """API routes for Wololo Converter"""
 import asyncio
 import json
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict
 
@@ -27,7 +28,13 @@ from .schemas import (
     PreviewRequest,
     PreviewResponse,
 )
-from .download_service import download_service, get_yt_dlp_version, extract_video_preview, executor
+from .download_service import (
+    DownloadProgress,
+    download_service,
+    get_yt_dlp_version,
+    extract_video_preview,
+    executor,
+)
 from .utils import validate_url, get_directory_size, format_file_size
 from .version import APP_VERSION
 
@@ -41,6 +48,69 @@ router = APIRouter()
 # Store for SSE connections and active download tasks
 sse_connections: Dict[str, asyncio.Queue] = {}
 download_tasks: Dict[str, asyncio.Task] = {}
+
+TERMINAL_STATUSES = (JobStatus.COMPLETED.value, JobStatus.FAILED.value, JobStatus.CANCELLED.value)
+VIDEO_EXTENSIONS = (".mp4", ".webm", ".mkv")
+# yt-dlp intermediate artifacts that must never be served
+TEMP_SUFFIXES = (".part", ".ytdl", ".temp")
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+async def persist_job_result(progress: DownloadProgress, result: dict) -> None:
+    """Store the terminal state of a job in the database."""
+    values = {
+        "status": progress.status.value,
+        "progress": progress.progress,
+        "speed": None,
+        "eta": None,
+        "current_stage": progress.current_stage,
+        "error_message": progress.error_message,
+        "completed_at": _utcnow(),
+    }
+    if progress.title:
+        values["title"] = progress.title
+    if result.get("success"):
+        values.update(
+            title=result.get("title") or progress.title,
+            filename=result.get("filename"),
+            file_size=result.get("file_size"),
+            duration=result.get("duration"),
+            thumbnail_url=result.get("thumbnail_url"),
+        )
+
+    async with get_db_context() as db:
+        await db.execute(
+            update(DownloadJob).where(DownloadJob.id == progress.job_id).values(**values)
+        )
+
+
+def _servable_files(job_dir: Path) -> list[Path]:
+    return [
+        f for f in job_dir.glob("*")
+        if f.is_file() and not f.name.endswith(TEMP_SUFFIXES)
+    ]
+
+
+def find_primary_file(job_dir: Path, job: DownloadJob) -> Path | None:
+    """Find the file produced by the job itself (not a later audio extraction)."""
+    files = _servable_files(job_dir)
+    if not files:
+        return None
+
+    if job.filename:
+        recorded = job_dir / job.filename
+        if recorded in files:
+            return recorded
+
+    if job.quality != VideoQuality.MP3.value:
+        videos = [f for f in files if f.suffix.lower() in VIDEO_EXTENSIONS]
+        if videos:
+            return max(videos, key=lambda f: f.stat().st_mtime)
+
+    return max(files, key=lambda f: f.stat().st_mtime)
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -77,7 +147,7 @@ async def preview_video(request: Request, preview_request: PreviewRequest):
         raise HTTPException(status_code=400, detail=error)
 
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(executor, extract_video_preview, preview_request.url)
         return result
     except ValueError as e:
@@ -139,34 +209,40 @@ async def start_download(
                 quality = VideoQuality.MP3
             # else keep default video quality
 
-        # Start download
-        job_id, task, detected_platform = await download_service.start_download(
-            url=download_request.url,
-            quality=quality,
-            progress_callback=progress_callback,
-        )
-
-        # Store task
-        download_tasks[job_id] = task
-
         # Map quality to output_format for DB storage
         db_output_format = (
             OutputFormat.AUDIO_MP3.value if quality == VideoQuality.MP3
             else OutputFormat.VIDEO.value
         )
 
-        # Create job in database
+        # Create the job row before the download starts so the final state
+        # can always be persisted, even for downloads that finish instantly.
+        job_id = str(uuid.uuid4())
         job = DownloadJob(
             id=job_id,
             url=download_request.url,
-            platform=detected_platform,
+            platform=platform,
             output_format=db_output_format,
             quality=quality.value,
             status=JobStatus.QUEUED.value,
-            created_at=datetime.utcnow(),
+            created_at=_utcnow(),
+            started_at=_utcnow(),
         )
         db.add(job)
         await db.commit()
+
+        # Start download
+        job_id, task, _ = await download_service.start_download(
+            url=download_request.url,
+            quality=quality,
+            progress_callback=progress_callback,
+            job_id=job_id,
+            on_finish=persist_job_result,
+        )
+
+        # Track the task until it finishes
+        download_tasks[job_id] = task
+        task.add_done_callback(lambda _t, jid=job_id: download_tasks.pop(jid, None))
 
         return DownloadStartResponse(
             job_id=job_id,
@@ -279,14 +355,9 @@ async def download_file(job_id: str, db: AsyncSession = Depends(get_session)):
     if not job_dir.exists():
         raise HTTPException(status_code=404, detail="Download files have expired")
 
-    # Get files in directory (exclude part files)
-    files = [f for f in job_dir.glob("*") if not f.name.endswith(".part")]
-
-    if not files:
+    file_path = find_primary_file(job_dir, job)
+    if not file_path:
         raise HTTPException(status_code=404, detail="No downloadable files found")
-
-    # Get the most recent file
-    file_path = max(files, key=lambda f: f.stat().st_mtime)
 
     # Determine content type
     suffix = file_path.suffix.lower()
@@ -316,10 +387,9 @@ async def extract_audio(job_id: str):
         raise HTTPException(status_code=404, detail="Download files have expired")
 
     # Find the video file
-    video_exts = ('.mp4', '.webm', '.mkv')
     video_files = [
-        f for f in job_dir.glob("*")
-        if f.suffix.lower() in video_exts and not f.name.endswith(".part")
+        f for f in _servable_files(job_dir)
+        if f.suffix.lower() in VIDEO_EXTENSIONS
     ]
     if not video_files:
         raise HTTPException(status_code=404, detail="No video file found")
@@ -337,7 +407,7 @@ async def extract_audio(job_id: str):
     # Run ffmpeg in thread pool to avoid blocking the event loop
     import subprocess
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     def _extract():
         result = subprocess.run(
@@ -387,19 +457,17 @@ async def download_audio_file(job_id: str):
 @router.delete("/jobs/{job_id}")
 async def cancel_job(job_id: str, db: AsyncSession = Depends(get_session)):
     """Cancel a download job"""
-    # Cancel in download service
-    cancelled = download_service.cancel_job(job_id)
+    # Signal the worker thread to stop. The asyncio task is intentionally not
+    # cancelled: it must keep running until the thread exits so cleanup and
+    # the concurrency limit stay correct.
+    download_service.cancel_job(job_id)
 
-    # Cancel the task if exists
-    if job_id in download_tasks:
-        download_tasks[job_id].cancel()
-        download_tasks.pop(job_id, None)
-
-    # Update database
+    # Don't overwrite jobs that already reached a terminal state
     await db.execute(
         update(DownloadJob)
         .where(DownloadJob.id == job_id)
-        .values(status=JobStatus.CANCELLED.value)
+        .where(DownloadJob.status.notin_(TERMINAL_STATUSES))
+        .values(status=JobStatus.CANCELLED.value, completed_at=_utcnow())
     )
     await db.commit()
 

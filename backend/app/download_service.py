@@ -1,11 +1,12 @@
 """Download service using yt-dlp with progress tracking"""
 import asyncio
+import shutil
 import time
 import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional, Callable, Any
+from typing import Awaitable, Dict, Optional, Callable, Any
 import yt_dlp
 from concurrent.futures import ThreadPoolExecutor
 
@@ -38,6 +39,15 @@ def _has_valid_cookies_file() -> bool:
         return False
 
 
+def _apply_cookie_options(opts: dict) -> dict:
+    """Add cookie options for platforms that require authentication."""
+    if _has_valid_cookies_file():
+        opts["cookiefile"] = settings.cookies_file
+    elif settings.cookies_from_browser:
+        opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
+    return opts
+
+
 class DownloadProgress:
     """Track download progress for a job"""
 
@@ -62,6 +72,17 @@ class DownloadProgress:
         self._last_real_update: float = 0.0
         self._interpolation_timer: Optional[threading.Timer] = None
         self._in_conversion = False
+        # Set by cancel_job; checked from the worker thread to abort the download
+        self.cancel_event = threading.Event()
+
+    @property
+    def cancelled(self) -> bool:
+        return self.cancel_event.is_set()
+
+    def raise_if_cancelled(self):
+        """Abort the worker thread if the user cancelled this job."""
+        if self.cancel_event.is_set():
+            raise yt_dlp.utils.DownloadCancelled("Cancelled by user")
 
     def _notify(self, download_ready: bool = False):
         """Send progress update via callback"""
@@ -116,6 +137,7 @@ class DownloadProgress:
 
     def progress_hook(self, d: dict):
         """yt-dlp progress hook — download phase maps to 0-70%"""
+        self.raise_if_cancelled()
         status = d.get("status", "")
 
         if status == "downloading":
@@ -179,6 +201,7 @@ class DownloadProgress:
 
     def postprocessor_hook(self, d: dict):
         """yt-dlp postprocessor hook — conversion phase maps to 70-95%"""
+        self.raise_if_cancelled()
         status = d.get("status", "")
         conv_range = self.CONVERSION_MAX - self.CONVERSION_MIN  # 25%
 
@@ -297,10 +320,7 @@ class DownloadService:
             "prefer_insecure": False,
         }
 
-        if _has_valid_cookies_file():
-            opts["cookiefile"] = settings.cookies_file
-        elif settings.cookies_from_browser:
-            opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
+        _apply_cookie_options(opts)
 
         # Detect platform for format/codec decisions
         platform = detect_platform(url) if url else None
@@ -397,6 +417,7 @@ class DownloadService:
 
                 with open(output_file, "wb") as f:
                     for chunk in resp.iter_bytes(chunk_size=256 * 1024):
+                        progress.raise_if_cancelled()
                         f.write(chunk)
                         downloaded += len(chunk)
                         if total > 0:
@@ -414,6 +435,7 @@ class DownloadService:
             if quality == VideoQuality.MP3:
                 import subprocess
 
+                progress.raise_if_cancelled()
                 progress.status = JobStatus.CONVERTING
                 progress.current_stage = "Extracting audio..."
                 progress.progress = progress.CONVERSION_MIN
@@ -478,6 +500,7 @@ class DownloadService:
 
                 info = ydl.extract_info(url, download=False)
                 progress.title = info.get("title", "Unknown")
+                progress.raise_if_cancelled()
 
                 # Start download
                 progress.status = JobStatus.DOWNLOADING
@@ -532,15 +555,21 @@ class DownloadService:
         url: str,
         quality: VideoQuality,
         progress_callback: Optional[Callable[[JobProgressUpdate], Any]] = None,
-    ) -> tuple[str, asyncio.Task]:
-        """Start a download job asynchronously. Returns job_id and task."""
+        job_id: Optional[str] = None,
+        on_finish: Optional[Callable[["DownloadProgress", dict], Awaitable[Any]]] = None,
+    ) -> tuple[str, asyncio.Task, Optional[str]]:
+        """Start a download job asynchronously. Returns job_id, task and platform.
+
+        ``on_finish`` is awaited with the final progress and result once the job
+        reaches a terminal state (completed, failed or cancelled).
+        """
         # Validate URL first
         is_valid, platform, error = validate_url(url)
         if not is_valid:
             raise ValueError(error)
 
         # Generate job ID
-        job_id = str(uuid.uuid4())
+        job_id = job_id or str(uuid.uuid4())
 
         # Create progress tracker
         progress = DownloadProgress(job_id, progress_callback)
@@ -553,9 +582,10 @@ class DownloadService:
             self.progress_callbacks[job_id] = progress_callback
 
         # Create async task
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         async def download_task():
+            result: dict = {"success": False, "error": "Unknown error"}
             try:
                 # Run blocking download in thread pool
                 result = await loop.run_in_executor(
@@ -567,7 +597,13 @@ class DownloadService:
                     progress,
                 )
 
-                if result["success"]:
+                if progress.cancelled:
+                    # Keep the cancelled state; drop partial/complete files
+                    progress.status = JobStatus.CANCELLED
+                    progress.error_message = "Cancelled by user"
+                    shutil.rmtree(settings.temp_dir / job_id, ignore_errors=True)
+                    result = {"success": False, "error": "Cancelled by user", "cancelled": True}
+                elif result["success"]:
                     progress.status = JobStatus.COMPLETED
                     progress.progress = 100
                     progress.current_stage = "Complete!"
@@ -587,12 +623,19 @@ class DownloadService:
                 progress.error_message = str(e)
                 self._remember_completed(progress)
                 progress._notify()
-                return {"success": False, "error": str(e)}
+                result = {"success": False, "error": str(e)}
+                return result
 
             finally:
                 # Clean up
+                progress._stop_interpolation()
                 self.active_jobs.pop(job_id, None)
                 self.progress_callbacks.pop(job_id, None)
+                if on_finish:
+                    try:
+                        await on_finish(progress, result)
+                    except Exception as e:
+                        print(f"Failed to persist job {job_id}: {e}")
 
         task = asyncio.create_task(download_task())
         return job_id, task, platform
@@ -605,9 +648,12 @@ class DownloadService:
         """Cancel a running job"""
         if job_id in self.active_jobs:
             progress = self.active_jobs[job_id]
+            # Signal the worker thread; the next yt-dlp hook raises and stops it.
+            # The job stays in active_jobs until the thread actually exits so the
+            # concurrency limit keeps counting it.
+            progress.cancel_event.set()
             progress.status = JobStatus.CANCELLED
             progress.error_message = "Cancelled by user"
-            self._remember_completed(progress)
             progress._notify()
             return True
         return False
@@ -636,10 +682,7 @@ def extract_video_preview(url: str) -> dict:
         "ignore_no_formats_error": True,
     }
 
-    if settings.cookies_file:
-        opts["cookiefile"] = settings.cookies_file
-    elif settings.cookies_from_browser:
-        opts["cookiesfrombrowser"] = (settings.cookies_from_browser,)
+    _apply_cookie_options(opts)
 
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:

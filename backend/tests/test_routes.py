@@ -125,3 +125,121 @@ class TestRootEndpoint:
         data = response.json()
         assert "name" in data
         assert "version" in data
+
+
+class TestJobPersistenceAndFiles:
+    async def _add_job(self, db_session, job_id, quality="720p", filename=None):
+        from datetime import datetime
+        from app.models import DownloadJob
+
+        db_session.add(DownloadJob(
+            id=job_id,
+            url="https://www.youtube.com/watch?v=test123",
+            platform="youtube",
+            output_format="video" if quality != "mp3" else "audio_mp3",
+            quality=quality,
+            status=JobStatus.QUEUED.value,
+            filename=filename,
+            created_at=datetime(2026, 1, 1),
+        ))
+        await db_session.commit()
+
+    async def test_persist_job_result_stores_completed_state(self, db_session, monkeypatch):
+        from contextlib import asynccontextmanager
+        from app import routes
+        from app.models import DownloadJob
+
+        await self._add_job(db_session, "persist-job")
+
+        @asynccontextmanager
+        async def fake_ctx():
+            yield db_session
+            await db_session.commit()
+
+        monkeypatch.setattr(routes, "get_db_context", fake_ctx)
+
+        progress = DownloadProgress("persist-job")
+        progress.status = JobStatus.COMPLETED
+        progress.progress = 100
+        progress.title = "My video"
+        await routes.persist_job_result(progress, {
+            "success": True,
+            "title": "My video",
+            "filename": "My video.mp4",
+            "file_size": 1234,
+            "duration": 42,
+        })
+
+        job = await db_session.get(DownloadJob, "persist-job")
+        await db_session.refresh(job)
+        assert job.status == JobStatus.COMPLETED.value
+        assert job.filename == "My video.mp4"
+        assert job.file_size == 1234
+        assert job.completed_at is not None
+
+    async def test_download_returns_video_after_audio_extraction(
+        self, client, db_session, monkeypatch, tmp_path
+    ):
+        import os
+        from app import routes
+
+        monkeypatch.setattr(routes.settings, "temp_dir", tmp_path)
+        await self._add_job(db_session, "video-job")
+        job_dir = tmp_path / "video-job"
+        job_dir.mkdir()
+        video = job_dir / "clip.mp4"
+        video.write_bytes(b"video")
+        audio = job_dir / "clip.mp3"
+        audio.write_bytes(b"audio")
+        # The extracted MP3 is newer than the video
+        os.utime(video, (1000, 1000))
+        os.utime(audio, (2000, 2000))
+
+        response = await client.get("/api/jobs/video-job/download")
+
+        assert response.status_code == 200
+        assert response.content == b"video"
+        assert "clip.mp4" in response.headers["content-disposition"]
+
+    async def test_download_prefers_recorded_filename(
+        self, client, db_session, monkeypatch, tmp_path
+    ):
+        from app import routes
+
+        monkeypatch.setattr(routes.settings, "temp_dir", tmp_path)
+        await self._add_job(db_session, "mp3-job", quality="mp3", filename="song.mp3")
+        job_dir = tmp_path / "mp3-job"
+        job_dir.mkdir()
+        (job_dir / "song.mp3").write_bytes(b"song")
+        (job_dir / "song.mp3.part").write_bytes(b"partial")
+
+        response = await client.get("/api/jobs/mp3-job/download")
+
+        assert response.status_code == 200
+        assert response.content == b"song"
+
+    async def test_cancel_does_not_overwrite_completed_job(self, client, db_session):
+        from app.models import DownloadJob
+
+        await self._add_job(db_session, "done-job")
+        job = await db_session.get(DownloadJob, "done-job")
+        job.status = JobStatus.COMPLETED.value
+        await db_session.commit()
+
+        response = await client.delete("/api/jobs/done-job")
+
+        assert response.status_code == 200
+        await db_session.refresh(job)
+        assert job.status == JobStatus.COMPLETED.value
+
+    async def test_cancel_marks_queued_job_cancelled(self, client, db_session):
+        from app.models import DownloadJob
+
+        await self._add_job(db_session, "queued-job")
+
+        response = await client.delete("/api/jobs/queued-job")
+
+        assert response.status_code == 200
+        job = await db_session.get(DownloadJob, "queued-job")
+        await db_session.refresh(job)
+        assert job.status == JobStatus.CANCELLED.value

@@ -3,6 +3,24 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.2] - 2026-11-08
+
+### Fixed
+
+- Cancelling a job now actually stops the yt-dlp worker thread (and Threads
+  downloads), removes partial files, and keeps the job counted against the
+  concurrency limit until the thread exits. A cancelled job is no longer
+  reported as completed or failed afterwards.
+- Persist the final job state (status, title, filename, size, duration,
+  `completed_at`) to the database, so `GET /api/jobs` no longer lists every
+  job as `queued`. Cancelling an already finished job no longer overwrites it.
+- "Download" returns the original video after "Save as MP3" instead of the
+  newer MP3 file; yt-dlp temp files (`.part`, `.ytdl`) are never served.
+- The cleanup task no longer deletes directories of downloads still running
+  (long downloads could be removed mid-flight after `MAX_FILE_AGE_HOURS`).
+- Video preview ignores a placeholder `cookies.txt` the same way downloads do,
+  instead of passing an empty cookies file to yt-dlp.
+
 ## [0.6.1] - 2026-10-10
 
 ### Fixed
@@ -34,3 +52,68 @@ All notable changes to Wololo Converter are documented here. Versions follow
 - Safely deliver yt-dlp progress events from worker threads to the asyncio loop.
 - Remove the unsupported YouTube `tv_embedded` client override.
 - Convert Threads downloads to MP3 when audio output is selected.
+
+## Earlier history
+
+Versions before 0.6.0 were not tagged in Git. They are reconstructed from the
+commit history and grouped by major delivery; the commits listed are the last
+commit of each delivery.
+
+### [0.5.3] - 2026-07-24 — yt-dlp hotfix (`812b7d5`)
+
+- Update and pin yt-dlp to fix Instagram downloads.
+- Align backend unit tests and Playwright specs with the quality API and UI.
+
+### [0.5.2] - 2026-04-18 — YouTube cookies and Instagram speed (`e9f830a`)
+
+- Support a Netscape `cookies.txt` file for YouTube in Docker deployments;
+  browser cookies disabled by default.
+- Instagram: stream copy when the source is already H.264, `veryfast` preset
+  when re-encoding, concurrent fragment downloads and larger HTTP chunks.
+
+### [0.5.1] - 2026-03-27 — More platforms and MP3 extraction (`2c0b00b`)
+
+- Re-enable Instagram (posts, reels, TV) with VP9 → H.264 re-encoding for
+  QuickTime compatibility; skip preview for Instagram URLs.
+- New platforms: Threads (custom extractor) and TikTok.
+- "Save as MP3" extracts audio from an already downloaded video.
+- Detect available qualities for portrait videos.
+
+### [0.5.0] - 2026-03-13 — Format tags and UI polish (`02f2f98`)
+
+- Format/quality tags on queue items and in the preview; fixed-height preview.
+- Quality selector only appears for a valid URL.
+- Instagram temporarily disabled (yt-dlp blocked by Instagram).
+- Version shown in the footer.
+
+### [0.4.0] - 2026-03-13 — Quality selection and video preview (`6287c03`…`30f0f15`)
+
+- `POST /api/preview` returns title, thumbnail, duration and available qualities.
+- New `quality` field (360p/480p/720p/1080p/MP3) replaces `output_format`,
+  with backward compatibility; yt-dlp format selection per quality.
+- Avoid unnecessary re-encoding; progress split into proportional phases
+  (download 0–70%, conversion 70–95%, finalization 95–100%).
+- Frontend preview card with thumbnail, quality radio buttons and a smoothly
+  animated progress bar.
+
+### [0.3.0] - 2026-02-26 — Output formats, tests and CI (`8ee0939`)
+
+- WebM, WAV, FLAC and OGG output formats alongside MP4/MP3/M4A.
+- Faster FFmpeg conversion (preset `fast`, multi-threading).
+- Backend (pytest), frontend (vitest) and E2E (Playwright) test suites.
+- GitHub Actions CI on push and pull request.
+
+### [0.2.0] - 2026-01-18 — UI refresh (`f4f49e7`)
+
+- New Icon component and updated UI assets.
+- Dedicated ports (frontend 47651, backend 47652).
+- Video compatibility fix using FFmpeg stream copy.
+- Facebook support hidden; queue history shown newest first.
+- Open Graph and Twitter meta tags for link previews.
+
+### [0.1.0] - 2026-01-17 — Initial release (`08da1ae`)
+
+- Full-stack app: FastAPI + yt-dlp backend, React + Vite frontend.
+- Downloads from YouTube, Instagram, Facebook and Twitter/X as video or audio.
+- Download queue with real-time progress over Server-Sent Events.
+- Docker Compose deployment.

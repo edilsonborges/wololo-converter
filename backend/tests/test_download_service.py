@@ -346,3 +346,139 @@ class TestDownloadService:
         assert result["success"] is True
         assert result["filename"] == "Thread audio.mp3"
         assert result["filepath"].endswith(".mp3")
+
+
+class TestCancellation:
+    def test_progress_hook_raises_after_cancel(self):
+        import pytest
+        import yt_dlp
+
+        progress = DownloadProgress("job")
+        progress.cancel_event.set()
+
+        with pytest.raises(yt_dlp.utils.DownloadCancelled):
+            progress.progress_hook({"status": "downloading", "downloaded_bytes": 1})
+        with pytest.raises(yt_dlp.utils.DownloadCancelled):
+            progress.postprocessor_hook({"status": "started", "postprocessor": "FFmpegCopyStream"})
+
+    async def test_cancel_stops_worker_and_keeps_cancelled_state(self, monkeypatch, tmp_path):
+        import asyncio
+        import threading
+
+        monkeypatch.setattr(download_service_module.settings, "temp_dir", tmp_path)
+        service = DownloadService()
+        started = threading.Event()
+        finished_states = []
+
+        def slow_download(url, job_id, quality, progress):
+            # Simulate yt-dlp invoking the progress hook in a loop
+            job_dir = tmp_path / job_id
+            job_dir.mkdir()
+            (job_dir / "video.mp4.part").write_bytes(b"partial")
+            started.set()
+            try:
+                for _ in range(500):
+                    progress.progress_hook({"status": "downloading", "downloaded_bytes": 1, "total_bytes": 10})
+                    threading.Event().wait(0.01)
+            except Exception as e:  # mirrors _run_download's handling
+                return {"success": False, "error": str(e)}
+            return {"success": True, "title": "t", "filename": "video.mp4"}
+
+        monkeypatch.setattr(service, "_run_download", slow_download)
+
+        async def on_finish(progress, result):
+            finished_states.append((progress.status, result.get("cancelled")))
+
+        job_id, task, _ = await service.start_download(
+            "https://www.youtube.com/watch?v=test123",
+            VideoQuality.Q_720P,
+            on_finish=on_finish,
+        )
+        await asyncio.get_running_loop().run_in_executor(None, started.wait, 5)
+
+        assert service.cancel_job(job_id) is True
+        # Still counted as active until the worker thread really stops
+        assert job_id in service.active_jobs
+
+        await asyncio.wait_for(task, timeout=5)
+
+        assert job_id not in service.active_jobs
+        assert finished_states == [(JobStatus.CANCELLED, True)]
+        assert not (tmp_path / job_id).exists()
+
+    async def test_start_download_accepts_job_id_and_calls_on_finish(self, monkeypatch):
+        service = DownloadService()
+        monkeypatch.setattr(
+            service,
+            "_run_download",
+            lambda url, job_id, quality, progress: {"success": True, "title": "T", "filename": "f.mp4"},
+        )
+        seen = []
+
+        async def on_finish(progress, result):
+            seen.append((progress.job_id, progress.status, result["filename"]))
+
+        job_id, task, platform = await service.start_download(
+            "https://www.youtube.com/watch?v=test123",
+            VideoQuality.Q_720P,
+            job_id="fixed-id",
+            on_finish=on_finish,
+        )
+        await task
+
+        assert job_id == "fixed-id"
+        assert platform == "youtube"
+        assert seen == [("fixed-id", JobStatus.COMPLETED, "f.mp4")]
+
+
+class TestPreviewCookies:
+    def test_preview_ignores_placeholder_cookies_file(self, monkeypatch, tmp_path):
+        cookies = tmp_path / "cookies.txt"
+        cookies.write_text("# Netscape HTTP Cookie File\n# placeholder\n")
+        monkeypatch.setattr(download_service_module.settings, "cookies_file", str(cookies))
+        monkeypatch.setattr(download_service_module.settings, "cookies_from_browser", "")
+        captured = {}
+
+        class FakeYDL:
+            def __init__(self, opts):
+                captured.update(opts)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def extract_info(self, url, download=False):
+                return {"title": "T", "formats": []}
+
+        monkeypatch.setattr(download_service_module.yt_dlp, "YoutubeDL", FakeYDL)
+
+        download_service_module.extract_video_preview("https://www.youtube.com/watch?v=test123")
+
+        assert "cookiefile" not in captured
+
+    def test_preview_uses_real_cookies_file(self, monkeypatch, tmp_path):
+        cookies = tmp_path / "cookies.txt"
+        cookies.write_text("# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t0\tSID\tabc\n")
+        monkeypatch.setattr(download_service_module.settings, "cookies_file", str(cookies))
+        captured = {}
+
+        class FakeYDL:
+            def __init__(self, opts):
+                captured.update(opts)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def extract_info(self, url, download=False):
+                return {"title": "T", "formats": []}
+
+        monkeypatch.setattr(download_service_module.yt_dlp, "YoutubeDL", FakeYDL)
+
+        download_service_module.extract_video_preview("https://www.youtube.com/watch?v=test123")
+
+        assert captured["cookiefile"] == str(cookies)
