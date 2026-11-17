@@ -15,7 +15,7 @@ export interface StatusDay {
 export interface StatusComponent {
   id: string;
   name: string;
-  group: 'Service' | 'Downloads';
+  group: string;
   status: ComponentState;
   uptime: number | null;
   latency_ms: number | null;

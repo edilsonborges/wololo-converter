@@ -23,13 +23,9 @@ function formatDay(date: string): string {
   return new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function dayDetail(component: StatusComponent, day: StatusDay): string {
+function dayDetail(day: StatusDay): string {
   if (day.status === 'no_data') {
-    return component.group === 'Downloads' ? 'No downloads' : 'No data';
-  }
-  if (component.group === 'Downloads') {
-    const total = (day.completed ?? 0) + (day.failed ?? 0);
-    return `${day.completed} of ${total} downloads succeeded`;
+    return 'No data';
   }
   if (day.estimated) {
     return day.uptime !== null ? `~${day.uptime.toFixed(2)}% uptime (estimated)` : 'Up (estimated)';
@@ -62,11 +58,11 @@ function UptimeBars({ component, visibleDays }: { component: StatusComponent; vi
               onFocus={() => setActive(index)}
               onBlur={() => setActive(null)}
               onClick={() => setActive(active === index ? null : index)}
-              aria-label={`${formatDay(day.date)}: ${meta.label}. ${dayDetail(component, day)}`}
+              aria-label={`${formatDay(day.date)}: ${meta.label}. ${dayDetail(day)}`}
             >
               <span
                 className={`block w-full h-full rounded-[2px] ${meta.bar} ${
-                  active === index ? 'opacity-70' : day.estimated ? 'opacity-50 group-hover:opacity-40' : 'group-hover:opacity-70'
+                  active === index ? 'opacity-70' : 'group-hover:opacity-70'
                 }`}
               />
             </button>
@@ -86,7 +82,7 @@ function UptimeBars({ component, visibleDays }: { component: StatusComponent; vi
             })()}
             {STATE_META[hovered.status].label}
           </p>
-          <p className="text-text-tertiary">{dayDetail(component, hovered)}</p>
+          <p className="text-text-tertiary">{dayDetail(hovered)}</p>
           {hovered.note && <p className="mt-1 text-xs text-text-muted">{hovered.note}</p>}
         </div>
       )}
@@ -94,7 +90,7 @@ function UptimeBars({ component, visibleDays }: { component: StatusComponent; vi
         <span>{visibleDays} days ago</span>
         <span>
           {component.uptime !== null
-            ? `${component.uptime.toFixed(2)}% ${component.group === 'Downloads' ? 'success' : 'uptime'}`
+            ? `${component.uptime.toFixed(2)}% uptime`
             : 'No data yet'}
         </span>
         <span>Today</span>
@@ -165,11 +161,6 @@ export default function StatusPage() {
     };
   }, []);
 
-  const groups = (['Service', 'Downloads'] as const).map((group) => ({
-    group,
-    components: status?.components.filter((c) => c.group === group) ?? [],
-  }));
-
   return (
     <div className="min-h-screen bg-white">
       <header className="py-6 px-4 border-b border-border-light">
@@ -208,23 +199,13 @@ export default function StatusPage() {
                 </div>
               </div>
 
-              {groups.map(({ group, components }) => (
-                <section key={group}>
-                  <h2 className="text-sm font-medium uppercase tracking-wide text-text-tertiary mb-1">
-                    {group === 'Downloads' ? 'Downloads by platform' : 'Service'}
-                  </h2>
-                  {group === 'Downloads' && (
-                    <p className="text-xs text-text-muted mb-1">
-                      Share of downloads that succeeded each day. A few failures are normal (private or removed videos).
-                    </p>
-                  )}
-                  <div className="card !py-0">
-                    {components.map((component) => (
-                      <ComponentRow key={component.id} component={component} visibleDays={visibleDays} />
-                    ))}
-                  </div>
-                </section>
-              ))}
+              <section>
+                <div className="card !py-0">
+                  {status.components.map((component) => (
+                    <ComponentRow key={component.id} component={component} visibleDays={visibleDays} />
+                  ))}
+                </div>
+              </section>
 
               <ul className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-text-tertiary" aria-label="Legend">
                 {(Object.keys(STATE_META) as ComponentState[]).map((state) => (
@@ -233,10 +214,6 @@ export default function StatusPage() {
                     {STATE_META[state].label}
                   </li>
                 ))}
-                <li className="flex items-center gap-1.5">
-                  <span className="inline-block w-3 h-3 rounded-[2px] bg-success opacity-50" aria-hidden />
-                  Estimated (before monitoring started)
-                </li>
               </ul>
             </>
           )}

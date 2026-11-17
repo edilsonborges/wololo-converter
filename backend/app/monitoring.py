@@ -2,8 +2,8 @@
 
 Every ``status_check_interval_seconds`` the monitor probes the website and the
 API, stores the results and samples CPU, memory and disk. The status page
-turns the probes into daily uptime and the download history into per-platform
-success rates.
+turns the probes into daily uptime; only the website is shown publicly, the
+API probe stays internal.
 """
 import asyncio
 import logging
@@ -18,7 +18,7 @@ from sqlalchemy import Integer, cast, delete, func, select, text
 
 from .config import settings
 from .database import get_db_context
-from .models import DownloadJob, JobStatus, StatusBackfill, StatusCheck, SystemSample, utcnow
+from .models import StatusBackfill, StatusCheck, SystemSample, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -28,15 +28,8 @@ PROBED_COMPONENTS = {
     "api": "API",
 }
 
-# Download platforms shown on the status page, in display order
-PLATFORM_COMPONENTS = {
-    "youtube": "YouTube",
-    "instagram": "Instagram",
-    "tiktok": "TikTok",
-    "twitter": "Twitter/X",
-    "threads": "Threads",
-    "facebook": "Facebook",
-}
+# Probed components shown on /status (the API probe stays internal)
+PUBLIC_COMPONENTS = ("website",)
 
 OPERATIONAL = "operational"
 DEGRADED = "degraded"
@@ -152,20 +145,6 @@ def uptime_status(uptime: Optional[float]) -> str:
     return OUTAGE
 
 
-def download_status(completed: int, failed: int) -> str:
-    """Downloads fail for reasons of their own (private or deleted videos), so
-    a couple of failures don't make a platform degraded."""
-    total = completed + failed
-    if total == 0:
-        return NO_DATA
-    rate = completed / total
-    if failed < 2 or rate >= 0.8:
-        return OPERATIONAL
-    if rate >= 0.5:
-        return DEGRADED
-    return OUTAGE
-
-
 def _days(today: date, count: int) -> list[date]:
     return [today - timedelta(days=offset) for offset in range(count - 1, -1, -1)]
 
@@ -227,55 +206,11 @@ async def probe_component_days(db, days: list[date], now: datetime) -> dict:
     return result
 
 
-async def platform_days(db, days: list[date]) -> dict:
-    start = datetime.combine(days[0], datetime.min.time())
-    rows = (await db.execute(
-        select(
-            DownloadJob.platform,
-            func.date(DownloadJob.created_at),
-            DownloadJob.status,
-            func.count(),
-        )
-        .where(
-            DownloadJob.created_at >= start,
-            DownloadJob.status.in_([JobStatus.COMPLETED.value, JobStatus.FAILED.value]),
-            # Jobs cut short by a server restart say nothing about the platform
-            func.coalesce(DownloadJob.current_stage, "") != "Interrupted",
-        )
-        .group_by(DownloadJob.platform, func.date(DownloadJob.created_at), DownloadJob.status)
-    )).all()
-
-    counts: dict = defaultdict(lambda: defaultdict(lambda: [0, 0]))
-    for platform, day, status, count in rows:
-        index = 0 if status == JobStatus.COMPLETED.value else 1
-        counts[platform][str(day)][index] += count
-
-    result = {}
-    for platform in PLATFORM_COMPONENTS:
-        series = []
-        for day in days:
-            completed, failed = counts[platform].get(day.isoformat(), (0, 0))
-            total = completed + failed
-            series.append({
-                "date": day.isoformat(),
-                "status": download_status(completed, failed),
-                "uptime": round(completed * 100 / total, 2) if total else None,
-                "completed": completed,
-                "failed": failed,
-            })
-        result[platform] = series
-    return result
-
-
-def _summary(series: list[dict], weight_key: Optional[str] = None) -> Optional[float]:
+def _summary(series: list[dict]) -> Optional[float]:
     values = [d["uptime"] for d in series if d["uptime"] is not None]
     if not values:
         return None
-    if weight_key is None:
-        return round(sum(values) / len(values), 2)
-    completed = sum(d["completed"] for d in series)
-    total = completed + sum(d["failed"] for d in series)
-    return round(completed * 100 / total, 2) if total else None
+    return round(sum(values) / len(values), 2)
 
 
 async def latest_probe(db, component: str) -> Optional[StatusCheck]:
@@ -291,11 +226,12 @@ async def build_status(db, days_count: Optional[int] = None) -> dict:
     now = utcnow()
     days = _days(now.date(), days_count or settings.status_history_days)
     probes = await probe_component_days(db, days, now)
-    platforms = await platform_days(db, days)
 
     components = []
     stale_after = timedelta(seconds=settings.status_check_interval_seconds * 3)
     for key, name in PROBED_COMPONENTS.items():
+        if key not in PUBLIC_COMPONENTS:
+            continue
         latest = await latest_probe(db, key)
         if latest is None:
             current = NO_DATA
@@ -313,20 +249,6 @@ async def build_status(db, days_count: Optional[int] = None) -> dict:
             "uptime": _summary(probes[key]),
             "latency_ms": latest.latency_ms if latest else None,
             "days": probes[key],
-        })
-
-    for key, name in PLATFORM_COMPONENTS.items():
-        series = platforms[key]
-        # Current state: the latest day with downloads in the last week
-        recent = next((d for d in reversed(series[-7:]) if d["status"] != NO_DATA), None)
-        components.append({
-            "id": key,
-            "name": name,
-            "group": "Downloads",
-            "status": recent["status"] if recent else NO_DATA,
-            "uptime": _summary(series, weight_key="completed"),
-            "latency_ms": None,
-            "days": series,
         })
 
     worst = max((SEVERITY[c["status"]] for c in components), default=0)

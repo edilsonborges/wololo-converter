@@ -18,13 +18,6 @@ class TestClassification:
         assert monitoring.uptime_status(97) == "degraded"
         assert monitoring.uptime_status(50) == "outage"
 
-    def test_download_thresholds(self):
-        assert monitoring.download_status(0, 0) == "no_data"
-        # One failed private video doesn't make a platform degraded
-        assert monitoring.download_status(0, 1) == "operational"
-        assert monitoring.download_status(9, 1) == "operational"
-        assert monitoring.download_status(6, 4) == "degraded"
-        assert monitoring.download_status(1, 9) == "outage"
 
 
 @pytest.fixture
@@ -73,33 +66,20 @@ class TestStatus:
             at = now - timedelta(minutes=minute)
             use_test_db.add(StatusCheck(checked_at=at, component="website", ok=minute not in (5, 6)))
             use_test_db.add(StatusCheck(checked_at=at, component="api", ok=True))
-        # Downloads: YouTube fine today, TikTok failing
-        for index in range(5):
-            use_test_db.add(DownloadJob(id=f"y{index}", url="u", platform="youtube", output_format="video",
-                                        status="completed", created_at=now))
-            use_test_db.add(DownloadJob(id=f"t{index}", url="u", platform="tiktok", output_format="video",
-                                        status="failed", created_at=now))
-        # A restart-interrupted job is ignored
-        use_test_db.add(DownloadJob(id="r", url="u", platform="instagram", output_format="video",
-                                    status="failed", current_stage="Interrupted", created_at=now))
+        use_test_db.add(DownloadJob(id="t1", url="u", platform="tiktok", output_format="video",
+                                    status="failed", created_at=now))
         await use_test_db.commit()
 
         data = (await client.get("/api/status")).json()
         assert data["days"] == settings.status_history_days
-        components = {c["id"]: c for c in data["components"]}
-        assert list(components)[:2] == ["website", "api"]
-
-        assert components["api"]["status"] == "operational"
-        assert components["website"]["status"] == "operational"
-        today = components["website"]["days"][-1]
+        # Only the website is public: no API or per-platform components
+        assert [c["id"] for c in data["components"]] == ["website"]
+        website = data["components"][0]
+        assert website["status"] == "operational"
+        today = website["days"][-1]
         assert today["uptime"] is not None and 90 < today["uptime"] < 100
-        assert components["website"]["days"][0]["status"] == "no_data"
-
-        assert components["youtube"]["status"] == "operational"
-        assert components["youtube"]["days"][-1]["completed"] == 5
-        assert components["tiktok"]["status"] == "outage"
-        assert components["instagram"]["status"] == "no_data"
-        assert data["status"] == "outage"
+        assert website["days"][0]["status"] == "no_data"
+        assert data["status"] == "operational"
 
     async def test_missing_probe_counts_as_down(self, use_test_db):
         now = utcnow().replace(hour=12, minute=0, second=0, microsecond=0)
@@ -113,11 +93,10 @@ class TestStatus:
         assert result["api"][0]["status"] == "outage"
 
     async def test_stale_probe_is_degraded(self, client, use_test_db):
-        use_test_db.add(StatusCheck(checked_at=utcnow() - timedelta(hours=1), component="api", ok=True))
+        use_test_db.add(StatusCheck(checked_at=utcnow() - timedelta(hours=1), component="website", ok=True))
         await use_test_db.commit()
         data = (await client.get("/api/status")).json()
-        api = next(c for c in data["components"] if c["id"] == "api")
-        assert api["status"] == "degraded"
+        assert data["components"][0]["status"] == "degraded"
 
 
 class TestBackfill:
@@ -172,13 +151,12 @@ class TestBackfill:
 
         now = utcnow()
         yesterday = (now - timedelta(days=1)).date().isoformat()
-        use_test_db.add(StatusCheck(checked_at=now - timedelta(minutes=1), component="api", ok=True))
-        use_test_db.add(StatusBackfill(day=yesterday, component="api", status="operational",
+        use_test_db.add(StatusCheck(checked_at=now - timedelta(minutes=1), component="website", ok=True))
+        use_test_db.add(StatusBackfill(day=yesterday, component="website", status="operational",
                                        uptime=None, note="Before monitoring: 2 download requests answered this day"))
         await use_test_db.commit()
         data = (await client.get("/api/status")).json()
-        api = next(c for c in data["components"] if c["id"] == "api")
-        day = api["days"][-2]
+        day = data["components"][0]["days"][-2]
         assert day["estimated"] is True
         assert day["status"] == "operational"
         assert day["note"].startswith("Before monitoring")
