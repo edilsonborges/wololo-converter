@@ -3,6 +3,16 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] - 2026-11-17
+
+### Added
+
+- Status page at `/status` (linked from the footer as `_status`): current state
+  and 90 days of history for the website, the API and downloads on each
+  platform. Also available as JSON at `/api/status`.
+- Downloads now record the requester's IP address and client, kept for abuse
+  prevention.
+
 ## [0.11.1] - 2026-11-17
 
 ### Fixed

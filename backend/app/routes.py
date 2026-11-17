@@ -17,7 +17,7 @@ from slowapi import Limiter
 from sse_starlette.sse import EventSourceResponse
 
 from .config import settings
-from .access import rate_limit_identity, validate_api_key
+from .access import api_key_name, client_ip, rate_limit_identity, validate_api_key
 from .database import get_session, get_db_context
 from .models import DownloadJob, JobStatus, OutputFormat, VideoQuality, utcnow
 from .schemas import (
@@ -35,7 +35,7 @@ from .schemas import (
     ResolveRequest,
     ResolveResponse,
 )
-from . import music_links
+from . import monitoring, music_links
 from .download_service import (
     TEMP_SUFFIXES,
     DownloadProgress,
@@ -212,6 +212,8 @@ async def queue_download(
     quality: VideoQuality,
     db: AsyncSession,
     platform: str,
+    request: Request,
+    source: str,
 ) -> tuple[str, asyncio.Task]:
     """Create the job row and hand the download to the shared queue."""
     event_loop = asyncio.get_running_loop()
@@ -247,6 +249,10 @@ async def queue_download(
         quality=quality.value,
         status=JobStatus.QUEUED.value,
         created_at=utcnow(),
+        client_ip=client_ip(request),
+        client_name=api_key_name(request),
+        source=source,
+        user_agent=(request.headers.get("User-Agent") or "")[:500] or None,
     )
 
     async def persist_queued_job():
@@ -298,7 +304,9 @@ async def start_download(
         # else keep default video quality
 
     try:
-        job_id, _ = await queue_download(download_request.url, quality, db, platform)
+        # The apps send an access key; the website doesn't
+        source = "app" if request.headers.get("X-Wololo-Key") else "web"
+        job_id, _ = await queue_download(download_request.url, quality, db, platform, request, source)
         return DownloadStartResponse(
             job_id=job_id,
             message="Download started",
@@ -395,7 +403,7 @@ async def download_from_link(
         raise HTTPException(status_code=400, detail=error)
 
     try:
-        job_id, task = await queue_download(source_url, quality, db, platform)
+        job_id, task = await queue_download(source_url, quality, db, platform, request, "link")
     except DownloadQueueFull as e:
         raise HTTPException(status_code=429, detail=str(e))
     except ValueError as e:
@@ -441,6 +449,13 @@ async def download_from_link(
         content=body.model_dump(mode="json"),
         headers={"Location": body.status_url, "Retry-After": str(retry_after)},
     )
+
+
+@router.get("/status", summary="Service and platform status for the last 90 days")
+async def service_status(db: AsyncSession = Depends(get_session)):
+    """Current state and daily history of the website, the API and downloads
+    per platform (as shown on /status)."""
+    return await monitoring.cached_status(db)
 
 
 @router.get("/jobs/{job_id}", response_model=JobResponse)

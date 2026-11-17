@@ -12,6 +12,8 @@ from slowapi.errors import RateLimitExceeded
 from .config import settings
 from .database import init_db
 from .routes import router, limiter
+from .admin import router as admin_router
+from .monitoring import run_monitor
 from .utils import run_cleanup_task
 from .version import APP_VERSION
 
@@ -22,14 +24,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger("app")
 
-# Background task handle
+# Background task handles
 cleanup_task = None
+monitor_task = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
-    global cleanup_task
+    global cleanup_task, monitor_task
 
     # Startup
     logger.info("Starting %s %s...", settings.app_name, APP_VERSION)
@@ -42,6 +45,9 @@ async def lifespan(app: FastAPI):
     cleanup_task = asyncio.create_task(run_cleanup_task())
     logger.info("File cleanup task started (interval: %d min)", settings.cleanup_interval_minutes)
 
+    # Status page probes and machine usage samples
+    monitor_task = asyncio.create_task(run_monitor())
+
     logger.info("Server ready at http://%s:%s", settings.host, settings.port)
 
     yield
@@ -49,12 +55,13 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down...")
 
-    if cleanup_task:
-        cleanup_task.cancel()
-        try:
-            await cleanup_task
-        except asyncio.CancelledError:
-            pass
+    for task in (cleanup_task, monitor_task):
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
     logger.info("Goodbye!")
 
@@ -106,6 +113,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Include API routes
 app.include_router(router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
 
 
 # Root endpoint

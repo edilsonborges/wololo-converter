@@ -71,6 +71,8 @@ docker-compose up -d --build
 
 **Agent access**: `GET /api/download?url=<encoded URL>[&quality=...]` (default 720p) waits `LINK_DOWNLOAD_WAIT_SECONDS` (25 s) and returns the file, or `202` with `status_url`/`download_url`. Agent guide in `frontend/public/llms.txt`; OpenAPI at `/api/openapi.json`; `robots.txt` blocks `/api/` except the contract. Keep `llms.txt` in sync when the API changes.
 
+**Status & admin**: `monitoring.py` runs a background loop (every `STATUS_CHECK_INTERVAL_SECONDS`) that probes the website (`STATUS_SITE_URL`) and the API into `status_checks`, and samples CPU/memory/disk into `system_samples`. `GET /api/status` builds the 90-day page from those probes plus per-platform job outcomes. `admin.py` serves `/api/admin/*` behind `ADMIN_PASSWORD` (signed cookie scoped to `/api/admin`); the SPA routes `/status`, `/login` and `/admin` in `main.tsx`. Jobs store `client_ip` (CF-Connecting-IP first), `client_name` (API key name), `source` (web/app/link) and `user_agent`; new columns are added in `database.add_missing_job_columns`.
+
 **Communication flow**: Frontend calls REST endpoints to start downloads, then subscribes to SSE (`/api/jobs/{id}/progress`) for real-time progress updates. The backend runs yt-dlp in a thread pool and pushes progress via `asyncio.Queue` to SSE connections.
 
 ## Key Design Decisions
