@@ -22,6 +22,7 @@ No encoding needed. The video link goes right after the domain, exactly as copie
 
 - `/d/<link>` always returns the file (or `202`), for any client.
 - `https://wololo.edilson.dev/<link>` (without `/d`) also returns the file to scripts and agents; browsers that ask for HTML get the website, which starts the download on screen.
+- `https://` is optional: `/d/youtube.com/watch?v=379BagNcNf4` works too.
 - Put a quality before the link to change the 720p default: `/d/mp3/<link>`, `/d/1080p/<link>`.
 
 Responses are the same as below.

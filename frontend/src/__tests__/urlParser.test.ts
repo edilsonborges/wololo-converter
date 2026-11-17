@@ -148,3 +148,13 @@ describe('short link quality prefix', () => {
     expect(parseAutoDownloadQuality('/https://www.youtube.com/watch')).toBe('720p');
   });
 });
+
+describe('short link without https://', () => {
+  it('accepts the bare domain, with or without a quality prefix', () => {
+    expect(parseAutoDownloadRoute(route('/youtube.com/watch', '?v=379BagNcNf4')))
+      .toMatchObject({ platform: 'youtube', isValid: true });
+    expect(parseAutoDownloadRoute(route('/mp3/www.youtube.com/watch', '?v=379BagNcNf4')))
+      .toMatchObject({ platform: 'youtube', isValid: true });
+    expect(parseAutoDownloadQuality('/mp3/www.youtube.com/watch')).toBe('mp3');
+  });
+});

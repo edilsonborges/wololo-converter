@@ -8,8 +8,9 @@ All notable changes to Wololo Converter are documented here. Versions follow
 ### Added
 
 - Shorter download links: paste the video link right after the address, as
-  copied, with no encoding — `wololo.edilson.dev/https://...` (or `/d/...` to
-  always get the file). Prefix a quality to change the 720p default, e.g.
+  copied, with no encoding and `https://` optional —
+  `wololo.edilson.dev/youtube.com/watch?v=...` (or `/d/...` to always get the
+  file). Prefix a quality to change the 720p default, e.g.
   `wololo.edilson.dev/mp3/https://...`.
 
 ### Changed

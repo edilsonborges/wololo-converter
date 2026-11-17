@@ -427,6 +427,8 @@ class TestShortLink:
         ("1080P/https://youtu.be/379BagNcNf4", "", "https://youtu.be/379BagNcNf4", "1080p"),
         ("https%3A%2F%2Fyoutu.be%2F379BagNcNf4", "", "https://youtu.be/379BagNcNf4", "720p"),
         ("x.com/user/status/123", "s=48", "https://x.com/user/status/123?s=48", "720p"),
+        ("youtube.com/watch", "v=379BagNcNf4", "https://youtube.com/watch?v=379BagNcNf4", "720p"),
+        ("mp3/www.youtube.com/watch", "v=379BagNcNf4", "https://www.youtube.com/watch?v=379BagNcNf4", "mp3"),
     ])
     def test_short_link_target(self, raw, query, expected_url, expected_quality):
         from app.routes import short_link_target
