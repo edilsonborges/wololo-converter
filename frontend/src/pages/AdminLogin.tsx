@@ -9,7 +9,14 @@ export default function AdminLogin() {
   useEffect(() => {
     document.title = 'Sign in · Wololo Converter';
     // Already signed in: go straight to the dashboard
-    adminApi.me().then(() => window.location.replace('/admin')).catch(() => undefined);
+    let active = true;
+    adminApi
+      .me()
+      .then(() => active && window.location.replace('/admin'))
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
   }, []);
 
   const submit = async (event: FormEvent) => {

@@ -3,6 +3,21 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] - 2026-11-17
+
+### Added
+
+- Shorter download links: paste the video link right after the address, as
+  copied, with no encoding and `https://` optional —
+  `wololo.edilson.dev/youtube.com/watch?v=...` (or `/d/...` to always get the
+  file). Prefix a quality to change the 720p default, e.g.
+  `wololo.edilson.dev/mp3/https://...`.
+
+### Changed
+
+- Footer status link reads `status`.
+- Links opened in the browser this way now download at 720p.
+
 ## [0.12.0] - 2026-11-17
 
 ### Added

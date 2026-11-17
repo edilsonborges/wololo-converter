@@ -1,4 +1,4 @@
-import { PLATFORMS, type PlatformInfo } from './types';
+import { PLATFORMS, type PlatformInfo, type VideoQuality } from './types';
 
 export interface ParsedURL {
   url: string;
@@ -115,6 +115,17 @@ interface RouteLocation {
  * /https://x.com/user/status/123?s=48
  * /x.com/user/status/123?s=48
  */
+const ROUTE_QUALITY = /^\/(360p|480p|720p|1080p|mp3)\//i;
+
+/**
+ * Quality of a short link: /mp3/<link> or /1080p/<link>. Without a prefix the
+ * short link uses 720p, the same default as the API.
+ */
+export function parseAutoDownloadQuality(pathname: string): VideoQuality {
+  const match = pathname.match(ROUTE_QUALITY);
+  return (match ? match[1].toLowerCase() : '720p') as VideoQuality;
+}
+
 export function parseAutoDownloadRoute(location: RouteLocation): ParsedURL | null {
   if (!location.pathname || location.pathname === '/') return null;
 
@@ -124,6 +135,10 @@ export function parseAutoDownloadRoute(location: RouteLocation): ParsedURL | nul
   } catch {
     return null;
   }
+
+  // Optional quality prefix: /mp3/<link>, /1080p/<link>
+  const qualityMatch = path.match(/^(360p|480p|720p|1080p|mp3)\/(.+)$/i);
+  if (qualityMatch) path = qualityMatch[2];
 
   // Be tolerant of a proxy that merges the two slashes after the protocol.
   path = path.replace(/^(https?):\/(?!\/)/i, '$1://');
