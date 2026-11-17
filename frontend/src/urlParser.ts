@@ -5,6 +5,8 @@ export interface ParsedURL {
   platform: string | null;
   platformInfo: PlatformInfo | null;
   isValid: boolean;
+  /** How many more times the same video appeared in the pasted text */
+  duplicates?: number;
 }
 
 // Pattern matching for platforms
@@ -80,6 +82,39 @@ export function normalizeVideoUrl(url: string, platform: string): string {
   }
 }
 
+const YOUTUBE_ID_PATH = /^\/(?:shorts|live|embed|v)\/([\w-]{6,})/;
+const POST_ID_PATHS: Record<string, RegExp> = {
+  instagram: /^\/(?:share\/)?(?:p|reels?|tv)\/([\w-]+)/,
+  twitter: /\/status\/(\d+)/,
+  tiktok: /\/video\/(\d+)/,
+};
+
+/**
+ * The same video however its link was written (mirrors media_key on the
+ * server): youtu.be/ID, youtube.com/watch?v=ID&t=30 and m.youtube.com/shorts/ID
+ * share a key, as do /p/ID and /reel/ID on Instagram.
+ */
+export function mediaKey(url: string, platform: string | null = detectPlatform(url)): string {
+  const source = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  let parsed: URL;
+  try {
+    parsed = new URL(source);
+  } catch {
+    return url.trim().toLowerCase();
+  }
+  const host = parsed.hostname.toLowerCase().replace(/^(?:www|m|mobile|music)\./, '');
+  if (platform === 'youtube') {
+    let id: string | null = null;
+    if (host === 'youtu.be') id = parsed.pathname.split('/').filter(Boolean)[0] ?? null;
+    else if (parsed.pathname === '/watch') id = parsed.searchParams.get('v');
+    else id = parsed.pathname.match(YOUTUBE_ID_PATH)?.[1] ?? null;
+    if (id) return `youtube:${id}`;
+  }
+  const post = platform ? parsed.pathname.match(POST_ID_PATHS[platform] ?? /$^/) : null;
+  if (post) return `${platform}:${post[1]}`;
+  return `${platform ?? 'other'}:${host}${parsed.pathname.replace(/\/+$/, '') || '/'}`;
+}
+
 export function parseURLs(text: string): ParsedURL[] {
   // Split by newlines, commas, or spaces and filter empty strings
   const lines = text
@@ -87,19 +122,27 @@ export function parseURLs(text: string): ParsedURL[] {
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
-  // Remove duplicates
-  const uniqueUrls = [...new Set(lines)];
-
-  return uniqueUrls.map((url) => {
-    const platform = detectPlatform(url);
-    const platformInfo = platform ? PLATFORMS[platform] ?? null : null;
-    return {
-      url: platform ? normalizeVideoUrl(url, platform) : url,
+  // The same video written in different ways counts once
+  const seen = new Map<string, ParsedURL>();
+  const result: ParsedURL[] = [];
+  for (const line of lines) {
+    const platform = detectPlatform(line);
+    const key = platform ? mediaKey(line, platform) : line;
+    const first = seen.get(key);
+    if (first) {
+      first.duplicates = (first.duplicates ?? 0) + 1;
+      continue;
+    }
+    const parsed: ParsedURL = {
+      url: platform ? normalizeVideoUrl(line, platform) : line,
       platform,
-      platformInfo,
+      platformInfo: platform ? PLATFORMS[platform] ?? null : null,
       isValid: platform !== null,
     };
-  });
+    seen.set(key, parsed);
+    result.push(parsed);
+  }
+  return result;
 }
 
 interface RouteLocation {

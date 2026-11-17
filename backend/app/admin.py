@@ -120,6 +120,9 @@ def _job_row(job: DownloadJob) -> dict:
         "client_name": job.client_name,
         "source": job.source,
         "user_agent": job.user_agent,
+        "estimated_size": job.estimated_size,
+        "request_count": job.request_count or 1,
+        "reused_from": job.reused_from,
     }
 
 

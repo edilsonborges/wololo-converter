@@ -84,6 +84,42 @@ def normalize_video_url(url: str) -> str:
     ).geturl()
 
 
+YOUTUBE_ID_PATH = re.compile(r"^/(?:shorts|live|embed|v)/([\w-]{6,})")
+# Platforms whose post id is unique on its own: /p/ID, /reel/ID and /reels/ID
+# are the same Instagram post; any user name in a tweet or TikTok URL works
+POST_ID_PATHS = {
+    "instagram": re.compile(r"^/(?:share/)?(?:p|reels?|tv)/([\w-]+)"),
+    "twitter": re.compile(r"/status/(\d+)"),
+    "tiktok": re.compile(r"/video/(\d+)"),
+}
+
+
+def media_key(url: str) -> str:
+    """The same video however its link was written: youtu.be/ID,
+    youtube.com/watch?v=ID&t=30, m.youtube.com/shorts/ID and tracking
+    parameters all give the same key."""
+    platform = detect_platform(url)
+    parsed = urlparse(url.strip())
+    host = parsed.netloc.lower().split(":", 1)[0]
+    host = re.sub(r"^(?:www|m|mobile|music)\.", "", host)
+    if platform == "youtube":
+        if host == "youtu.be":
+            video_id = next((part for part in parsed.path.split("/") if part), None)
+        elif parsed.path == "/watch":
+            video_id = (parse_qs(parsed.query).get("v") or [None])[0]
+        else:
+            match = YOUTUBE_ID_PATH.match(parsed.path)
+            video_id = match.group(1) if match else None
+        if video_id:
+            return f"youtube:{video_id}"
+    pattern = POST_ID_PATHS.get(platform)
+    match = pattern.search(parsed.path) if pattern else None
+    if match:
+        return f"{platform}:{match.group(1)}"
+    path = parsed.path.rstrip("/") or "/"
+    return f"{platform or 'other'}:{host}{path}"[:300]
+
+
 def is_allowed_domain(url: str) -> bool:
     """Check if URL domain is in the allowed list"""
     try:
@@ -187,38 +223,107 @@ def get_directory_size(path: Path) -> int:
     return total
 
 
-async def cleanup_old_files(active_job_ids: Optional[set[str]] = None) -> int:
-    """Clean up job directories older than max_file_age_hours.
+# yt-dlp intermediate artifacts that are never a finished output
+TEMP_SUFFIXES = (".part", ".ytdl", ".temp")
 
-    Directories of jobs still running are skipped: a directory's mtime does not
-    change while yt-dlp grows a .part file, so long downloads would otherwise be
-    deleted mid-flight. Returns number of directories cleaned.
+
+def free_disk_bytes() -> int:
+    try:
+        return shutil.disk_usage(settings.temp_dir).free
+    except OSError:
+        return 0
+
+
+def _unique_size(dirs: list[Path]) -> int:
+    """Bytes used by these directories; files hard-linked between them (cache
+    hits) count once."""
+    seen = set()
+    total = 0
+    for job_dir in dirs:
+        for item in job_dir.glob("*"):
+            try:
+                stat = item.stat()
+            except OSError:
+                continue
+            if (stat.st_dev, stat.st_ino) not in seen:
+                seen.add((stat.st_dev, stat.st_ino))
+                total += stat.st_size
+    return total
+
+
+def enforce_storage(active_job_ids: Optional[set[str]] = None, needed_bytes: int = 0) -> int:
+    """Remove leftovers and keep the file cache within its limits.
+
+    - Directories with partial files (or nothing to serve) are removed after
+      ``max_file_age_hours``.
+    - Finished downloads are the cache: removed after ``cache_max_age_hours``,
+      and least recently used first while the cache is over ``cache_max_gb``
+      or the disk has less than ``min_free_disk_mb`` (+ ``needed_bytes``) free.
+
+    Directories of running jobs are never touched: their mtime doesn't change
+    while yt-dlp grows a .part file. Returns the number of directories removed.
     """
     import time
 
     active_job_ids = active_job_ids or set()
-
-    cleaned = 0
-    max_age_seconds = settings.max_file_age_hours * 3600
-    now = time.time()
-
     if not settings.temp_dir.exists():
         return 0
+
+    now = time.time()
+    removed = 0
+    cache: list[tuple[float, Path]] = []
+
+    def remove(job_dir: Path) -> None:
+        nonlocal removed
+        shutil.rmtree(job_dir, ignore_errors=True)
+        removed += 1
 
     for job_dir in settings.temp_dir.iterdir():
         if not job_dir.is_dir() or job_dir.name in active_job_ids:
             continue
-
         try:
-            # Check directory modification time
-            mtime = job_dir.stat().st_mtime
-            if now - mtime > max_age_seconds:
-                shutil.rmtree(job_dir)
-                cleaned += 1
-        except Exception:
-            pass  # Skip if we can't access/delete
+            age = now - job_dir.stat().st_mtime
+            files = [f for f in job_dir.iterdir() if f.is_file()]
+        except OSError:
+            continue
+        finished = bool(files) and not any(f.name.endswith(TEMP_SUFFIXES) for f in files)
+        if not finished:
+            if age > settings.max_file_age_hours * 3600:
+                remove(job_dir)
+        elif age > settings.cache_max_age_hours * 3600:
+            remove(job_dir)
+        else:
+            cache.append((now - age, job_dir))
 
-    return cleaned
+    cache.sort()  # least recently used first
+    budget = settings.cache_max_gb * 1024 ** 3
+    wanted_free = settings.min_free_disk_mb * 1024 * 1024 + needed_bytes
+    while cache and (
+        _unique_size([d for _, d in cache]) > budget or free_disk_bytes() < wanted_free
+    ):
+        remove(cache.pop(0)[1])
+    return removed
+
+
+def link_job_files(files: list[Path], destination: Path) -> None:
+    """Give a new job the files of a cached one without copying them."""
+    destination.mkdir(parents=True, exist_ok=True)
+    for source in files:
+        target = destination / source.name
+        try:
+            os.link(source, target)
+        except OSError:
+            shutil.copy2(source, target)
+    # Both now count as just used for the cache's LRU order
+    now = None
+    os.utime(destination, now)
+    if files:
+        os.utime(files[0].parent, now)
+
+
+async def cleanup_old_files(active_job_ids: Optional[set[str]] = None) -> int:
+    """Periodic cleanup (see enforce_storage)."""
+    return await asyncio.to_thread(enforce_storage, active_job_ids)
 
 
 async def run_cleanup_task():

@@ -49,7 +49,13 @@ Always percent-encode `url` (a raw `&` in the video URL would otherwise split it
        "download_url": "/api/jobs/<job_id>/download", "progress_url": "/api/jobs/<job_id>/progress",
        "retry_after_seconds": 5, "message": "..."}
 
-- `400`: invalid or unsupported URL. `422`: the download failed (`detail` says why) or a parameter is invalid. `429`: rate limit (10 downloads per minute) or the queue is full; retry later.
+- `400`: invalid or unsupported URL. `422`: the download failed (`detail` says why) or a parameter is invalid. `429`: rate limit (10 downloads per minute), 3 downloads of yours already running, or the queue is full; retry later. `503`: the server is low on storage; retry later.
+
+## Limits and repeated requests
+
+- Downloads larger than 4 GB are refused before they start, using the size the platform reports. The `422` then carries `suggested_quality`, the best quality that fits: retry with it. Videos whose size can't be estimated are limited to 3 hours.
+- Asking again for a video (same video and quality) that is still downloading joins that download instead of starting another one.
+- A video that was downloaded recently is served from the cache right away: `200` with the file, or `status: completed` from `POST /api/download`.
 
 ## Following a job after 202
 
@@ -57,14 +63,14 @@ Always percent-encode `url` (a raw `&` in the video URL would otherwise split it
    Status values: `queued`, `validating`, `downloading`, `converting`, `finalizing`, `completed`, `failed`, `cancelled`.
 2. When `status` is `completed`, `GET /api/jobs/<job_id>/download` returns the file. Before that it answers `409`.
 3. On `failed`, read `error_message`. On `cancelled`, start over.
-4. Fetch the file soon: finished files are deleted after about 1 hour.
+4. Fetch the file soon: finished files are kept for a limited time (at most 3 days, less when the cache is full).
 
 Long videos can take minutes; a job times out after 1 hour.
 
 ## Other endpoints
 
 - `POST /api/download` with JSON `{"url": "...", "quality": "720p"}`: start a job and follow it as above.
-- `POST /api/preview` with JSON `{"url": "..."}`: title, duration, thumbnail and available qualities without downloading.
+- `POST /api/preview` with JSON `{"url": "..."}`: title, duration, thumbnail, available qualities and estimated size per quality (`sizes`, in bytes, with the `size_limit`) without downloading.
 - `GET /api/health`: service health and version.
 - `GET /api/status`: current state and 90-day uptime history of the website (human view: /status).
 - `DELETE /api/jobs/<job_id>`: cancel a job.

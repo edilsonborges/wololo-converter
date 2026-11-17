@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from slowapi import Limiter
 from sse_starlette.sse import EventSourceResponse
 
@@ -46,7 +46,15 @@ from .download_service import (
     extract_video_preview,
     executor,
 )
-from .utils import validate_url, get_directory_size, format_file_size
+from .utils import (
+    enforce_storage,
+    format_file_size,
+    free_disk_bytes,
+    get_directory_size,
+    link_job_files,
+    media_key,
+    validate_url,
+)
 from .version import APP_VERSION
 
 
@@ -58,8 +66,7 @@ limiter = Limiter(key_func=rate_limit_identity)
 # Router
 router = APIRouter(dependencies=[Depends(validate_api_key)])
 
-# Store for SSE connections and active download tasks
-sse_connections: Dict[str, asyncio.Queue] = {}
+# Active download tasks
 download_tasks: Dict[str, asyncio.Task] = {}
 
 TERMINAL_STATUSES = (JobStatus.COMPLETED.value, JobStatus.FAILED.value, JobStatus.CANCELLED.value)
@@ -80,6 +87,8 @@ async def persist_job_result(progress: DownloadProgress, result: dict) -> None:
     }
     if progress.title:
         values["title"] = progress.title
+    if progress.estimated_size:
+        values["estimated_size"] = progress.estimated_size
     if result.get("success"):
         values.update(
             title=result.get("title") or progress.title,
@@ -93,6 +102,8 @@ async def persist_job_result(progress: DownloadProgress, result: dict) -> None:
         await db.execute(
             update(DownloadJob).where(DownloadJob.id == progress.job_id).values(**values)
         )
+    if result.get("success"):
+        await keep_storage_in_check()
 
 
 CONTENT_TYPES = {
@@ -208,6 +219,54 @@ async def resolve_music_link(request: Request, resolve_request: ResolveRequest):
         raise HTTPException(status_code=502, detail=f"Could not read the music page: {e}")
 
 
+class TooManyDownloads(Exception):
+    """The visitor already has the maximum number of downloads running."""
+
+
+class StorageFull(Exception):
+    """The disk is too full to accept new downloads."""
+
+
+async def _cached_job(db: AsyncSession, key: str, quality: VideoQuality) -> tuple[DownloadJob, list[Path]] | None:
+    """A finished download of the same video and quality whose files are still here."""
+    rows = (await db.execute(
+        select(DownloadJob)
+        .where(DownloadJob.media_key == key)
+        .where(DownloadJob.quality == quality.value)
+        .where(DownloadJob.status == JobStatus.COMPLETED.value)
+        .order_by(DownloadJob.completed_at.desc())
+        .limit(5)
+    )).scalars().all()
+    for row in rows:
+        job_dir = settings.temp_dir / row.id
+        primary = find_primary_file(job_dir, row) if job_dir.is_dir() else None
+        if primary:
+            return row, [primary]
+    return None
+
+
+async def _finished(result: dict) -> dict:
+    return result
+
+
+async def _join_running(db: AsyncSession, key: str, quality: VideoQuality):
+    """Share the running download of this video and quality, if there is one."""
+    shared = download_service.find_shared(key, quality)
+    if not shared or shared.task_ready is None:
+        return None
+    task = await asyncio.shield(shared.task_ready)
+    if task is None or shared.cancelled:
+        return None
+    shared.holders += 1
+    await db.execute(
+        update(DownloadJob)
+        .where(DownloadJob.id == shared.job_id)
+        .values(request_count=func.coalesce(DownloadJob.request_count, 1) + 1)
+    )
+    await db.commit()
+    return shared.job_id, task, "joined"
+
+
 async def queue_download(
     url: str,
     quality: VideoQuality,
@@ -215,29 +274,73 @@ async def queue_download(
     platform: str,
     request: Request,
     source: str,
-) -> tuple[str, asyncio.Task]:
-    """Create the job row and hand the download to the shared queue."""
-    event_loop = asyncio.get_running_loop()
+) -> tuple[str, asyncio.Task, str]:
+    """Hand a request to the shared queue. Returns the job id, a task that
+    resolves to the result, and how it was served:
 
-    # Create progress callback for SSE
-    def progress_callback(update: JobProgressUpdate):
-        def enqueue_update():
-            queue = sse_connections.get(update.job_id)
-            if not queue:
-                return
-            try:
-                queue.put_nowait(update)
-            except asyncio.QueueFull:
-                pass
-
-        # yt-dlp invokes progress hooks from its worker thread.
-        event_loop.call_soon_threadsafe(enqueue_update)
-
-    # Map quality to output_format for DB storage
+    - ``joined``: the same video and quality is already downloading; the
+      request shares that job instead of downloading it again.
+    - ``cached``: a finished file of the same video and quality is still on
+      disk; a new job is created already completed, with the file linked in.
+    - ``started``: a new download.
+    """
+    key = media_key(url)
     db_output_format = (
         OutputFormat.AUDIO_MP3.value if quality == VideoQuality.MP3
         else OutputFormat.VIDEO.value
     )
+    requester = dict(
+        client_ip=client_ip(request),
+        client_name=api_key_name(request),
+        source=source,
+        user_agent=(request.headers.get("User-Agent") or "")[:500] or None,
+    )
+
+    joined = await _join_running(db, key, quality)
+    if joined:
+        return joined
+
+    cached = await _cached_job(db, key, quality)
+    if cached:
+        original, files = cached
+        job_id = str(uuid.uuid4())
+        await asyncio.to_thread(link_job_files, files, settings.temp_dir / job_id)
+        now = utcnow()
+        db.add(DownloadJob(
+            id=job_id, url=url, platform=platform, output_format=db_output_format,
+            quality=quality.value, status=JobStatus.COMPLETED.value, progress=100.0,
+            current_stage="Complete!", title=original.title, filename=files[0].name,
+            file_size=original.file_size, duration=original.duration,
+            thumbnail_url=original.thumbnail_url, estimated_size=original.estimated_size,
+            media_key=key, reused_from=original.id, request_count=1,
+            created_at=now, started_at=now, completed_at=now, **requester,
+        ))
+        await db.commit()
+        progress = DownloadProgress(job_id)
+        progress.status = JobStatus.COMPLETED
+        progress.progress = 100
+        progress.current_stage = "Complete!"
+        progress.title = original.title
+        progress.filename = files[0].name
+        progress.estimated_size = original.estimated_size
+        download_service._remember_completed(progress)
+        result = {"success": True, "title": original.title, "filename": files[0].name,
+                  "file_size": original.file_size, "cached": True}
+        return job_id, asyncio.create_task(_finished(result)), "cached"
+
+    if requester["client_name"] is None:
+        running = download_service.active_for_client(requester["client_ip"])
+        if running >= settings.max_active_downloads_per_client:
+            raise TooManyDownloads(
+                f"You already have {running} downloads in progress. "
+                "Wait for one to finish before starting another."
+            )
+
+    reserve = settings.min_free_disk_mb * 1024 * 1024
+    if free_disk_bytes() < reserve:
+        await asyncio.to_thread(enforce_storage, set(download_service.active_jobs))
+        if free_disk_bytes() < reserve:
+            raise StorageFull("The server is low on storage right now. Please try again later.")
 
     # Create the job row before the download starts so the final state
     # can always be persisted, even for downloads that finish instantly.
@@ -250,29 +353,57 @@ async def queue_download(
         quality=quality.value,
         status=JobStatus.QUEUED.value,
         created_at=utcnow(),
-        client_ip=client_ip(request),
-        client_name=api_key_name(request),
-        source=source,
-        user_agent=(request.headers.get("User-Agent") or "")[:500] or None,
+        media_key=key,
+        request_count=1,
+        **requester,
     )
 
     async def persist_queued_job():
         db.add(job)
         await db.commit()
 
+    # Another request for the same video may have started while this one
+    # looked at the cache and the disk. Nothing awaits between this check and
+    # start_download registering the job, so two can't both start.
+    if download_service.find_shared(key, quality):
+        joined = await _join_running(db, key, quality)
+        if joined:
+            return joined
+
     job_id, task, _ = await download_service.start_download(
         url=url,
         quality=quality,
-        progress_callback=progress_callback,
         job_id=job_id,
         on_finish=persist_job_result,
         on_enqueue=persist_queued_job,
+        on_start=persist_job_started,
+        media_key=key,
+        client=requester["client_ip"],
     )
 
     # Track the task until it finishes
     download_tasks[job_id] = task
     task.add_done_callback(lambda _t, jid=job_id: download_tasks.pop(jid, None))
-    return job_id, task
+    return job_id, task, "started"
+
+
+async def persist_job_started(progress: DownloadProgress) -> None:
+    """Show the job as downloading (admin view) once a slot picks it up."""
+    async with get_db_context() as db:
+        await db.execute(
+            update(DownloadJob)
+            .where(DownloadJob.id == progress.job_id)
+            .where(DownloadJob.status == JobStatus.QUEUED.value)
+            .values(status=JobStatus.DOWNLOADING.value, started_at=utcnow())
+        )
+
+
+async def keep_storage_in_check() -> None:
+    """Trim the cache after a download adds to it."""
+    try:
+        await asyncio.to_thread(enforce_storage, set(download_service.active_jobs))
+    except Exception:
+        logger.exception("Storage cleanup failed")
 
 
 @router.post(
@@ -307,15 +438,20 @@ async def start_download(
     try:
         # The apps send an access key; the website doesn't
         source = "app" if request.headers.get("X-Wololo-Key") else "web"
-        job_id, _ = await queue_download(download_request.url, quality, db, platform, request, source)
+        job_id, _, how = await queue_download(download_request.url, quality, db, platform, request, source)
+        if how == "cached":
+            return DownloadStartResponse(job_id=job_id, message="Ready (served from cache)", status=JobStatus.COMPLETED)
+        progress = download_service.get_job_progress(job_id)
         return DownloadStartResponse(
             job_id=job_id,
-            message="Download started",
-            status=JobStatus.QUEUED,
+            message="Already downloading; joined the running download" if how == "joined" else "Download started",
+            status=progress.status if progress else JobStatus.QUEUED,
         )
 
-    except DownloadQueueFull as e:
+    except (DownloadQueueFull, TooManyDownloads) as e:
         raise HTTPException(status_code=429, detail=str(e))
+    except StorageFull as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -365,8 +501,11 @@ def link_source_url(request: Request, url: str) -> str:
         },
         400: {"model": ErrorResponse, "description": "Invalid or unsupported URL"},
         401: {"model": ErrorResponse, "description": "Invalid `X-Wololo-Key` (the key is optional)"},
-        422: {"model": DownloadFailedResponse, "description": "The download failed, or a parameter is invalid"},
-        429: {"model": ErrorResponse, "description": "Rate limit reached or download queue full"},
+        422: {"model": DownloadFailedResponse, "description": "The download failed or was refused as too large "
+              "(over 4 GB; `suggested_quality` names a quality that fits), or a parameter is invalid"},
+        429: {"model": ErrorResponse, "description": "Rate limit reached, 3 downloads of yours already running, "
+              "or download queue full"},
+        503: {"model": ErrorResponse, "description": "The server is low on storage; retry later"},
     },
 )
 @limiter.limit(settings.rate_limit_downloads)
@@ -414,9 +553,11 @@ async def serve_link(
         raise HTTPException(status_code=400, detail=error)
 
     try:
-        job_id, task = await queue_download(source_url, quality, db, platform, request, "link")
-    except DownloadQueueFull as e:
+        job_id, task, _ = await queue_download(source_url, quality, db, platform, request, "link")
+    except (DownloadQueueFull, TooManyDownloads) as e:
         raise HTTPException(status_code=429, detail=str(e))
+    except StorageFull as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -439,6 +580,7 @@ async def serve_link(
                     job_id=job_id,
                     status=status,
                     detail=result.get("error") or "Download failed",
+                    suggested_quality=result.get("suggested_quality"),
                 ).model_dump(mode="json"),
             )
 
@@ -498,8 +640,11 @@ def short_link_target(raw_path: str, query_string: str) -> tuple[str, VideoQuali
                           "audio/mpeg": {"schema": {"type": "string", "format": "binary"}}}},
         202: {"model": DownloadAcceptedResponse, "description": "Still downloading; follow `status_url`."},
         400: {"model": ErrorResponse, "description": "Invalid or unsupported URL"},
-        422: {"model": DownloadFailedResponse, "description": "The download failed"},
-        429: {"model": ErrorResponse, "description": "Rate limit reached or download queue full"},
+        422: {"model": DownloadFailedResponse, "description": "The download failed or was refused as too large "
+              "(over 4 GB; `suggested_quality` names a quality that fits), or a parameter is invalid"},
+        429: {"model": ErrorResponse, "description": "Rate limit reached, 3 downloads of yours already running, "
+              "or download queue full"},
+        503: {"model": ErrorResponse, "description": "The server is low on storage; retry later"},
     },
 )
 @limiter.limit(settings.rate_limit_downloads)
@@ -552,16 +697,37 @@ async def get_job_status(job_id: str, db: AsyncSession = Depends(get_session)):
     return response
 
 
+def _row_update(job: DownloadJob) -> JobProgressUpdate:
+    status = JobStatus(job.status)
+    return JobProgressUpdate(
+        job_id=job.id,
+        status=status,
+        progress=job.progress or 0,
+        current_stage=job.current_stage,
+        title=job.title,
+        error_message=job.error_message,
+        download_ready=status == JobStatus.COMPLETED,
+        estimated_size=job.estimated_size,
+    )
+
+
+async def _stored_final_update(job_id: str) -> JobProgressUpdate | None:
+    """Final state from the database, for jobs no longer tracked in memory
+    (cache hits, older jobs, or after a restart)."""
+    async with get_db_context() as db:
+        job = (await db.execute(select(DownloadJob).where(DownloadJob.id == job_id))).scalar_one_or_none()
+    if job and job.status in TERMINAL_STATUSES:
+        return _row_update(job)
+    return None
+
+
 @router.get("/jobs/{job_id}/progress")
 async def job_progress_sse(job_id: str, request: Request):
     """SSE endpoint for real-time progress updates"""
 
-    # Create queue for this connection
     queue: asyncio.Queue[JobProgressUpdate] = asyncio.Queue(maxsize=50)
-    sse_connections[job_id] = queue
     event_loop = asyncio.get_running_loop()
 
-    # Register callback with download service
     def callback(update: JobProgressUpdate):
         def enqueue_update():
             try:
@@ -577,39 +743,45 @@ async def job_progress_sse(job_id: str, request: Request):
         # Progress callbacks may run inside the yt-dlp worker thread.
         event_loop.call_soon_threadsafe(enqueue_update)
 
+    def tracked() -> bool:
+        return job_id in download_service.active_jobs or job_id in download_service.completed_jobs
+
     download_service.register_callback(job_id, callback)
+    if not tracked():
+        final = await _stored_final_update(job_id)
+        if final:
+            callback(final)
 
     async def event_generator():
         try:
+            idle = 0.0
             while True:
-                # Check if client disconnected
                 if await request.is_disconnected():
                     break
 
                 try:
-                    # Wait for next progress update with timeout
-                    update = await asyncio.wait_for(queue.get(), timeout=30.0)
-                    yield {
-                        "event": "progress",
-                        "data": update.model_dump_json(),
-                    }
-
-                    # If download is complete or failed, send final event and close
-                    if update.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
-                        yield {
-                            "event": "complete",
-                            "data": update.model_dump_json(),
-                        }
-                        break
-
+                    update = await asyncio.wait_for(queue.get(), timeout=10.0)
                 except asyncio.TimeoutError:
-                    # Send keepalive
-                    yield {"event": "ping", "data": "{}"}
+                    # The job may have finished out of sight (e.g. its snapshot
+                    # was dropped): read its final state from the database
+                    if not tracked():
+                        final = await _stored_final_update(job_id)
+                        if final:
+                            queue.put_nowait(final)
+                            continue
+                    idle += 10
+                    if idle >= 30:
+                        idle = 0
+                        yield {"event": "ping", "data": "{}"}
+                    continue
 
+                idle = 0
+                yield {"event": "progress", "data": update.model_dump_json()}
+                if update.status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+                    yield {"event": "complete", "data": update.model_dump_json()}
+                    break
         finally:
-            # Cleanup
-            sse_connections.pop(job_id, None)
-            download_service.unregister_callback(job_id)
+            download_service.unregister_callback(job_id, callback)
 
     return EventSourceResponse(event_generator())
 
@@ -723,6 +895,12 @@ async def download_audio_file(job_id: str):
 @router.delete("/jobs/{job_id}")
 async def cancel_job(job_id: str, db: AsyncSession = Depends(get_session)):
     """Cancel a download job"""
+    # Shared by several requests: only the last one to give up stops it
+    progress = download_service.get_job_progress(job_id)
+    if progress and progress.holders > 1:
+        progress.holders -= 1
+        return {"message": "Job cancelled", "job_id": job_id}
+
     # Signal the worker thread to stop. The asyncio task is intentionally not
     # cancelled: it must keep running until the thread exits so cleanup and
     # the concurrency limit stay correct.

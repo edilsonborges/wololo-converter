@@ -49,6 +49,11 @@ export interface AdminJob {
   client_name: string | null;
   source: string | null;
   user_agent: string | null;
+  estimated_size: number | null;
+  /** Requests that shared this download while it ran */
+  request_count: number;
+  /** Served from the cache: the job whose file was reused */
+  reused_from: string | null;
 }
 
 export interface PeriodSummary {

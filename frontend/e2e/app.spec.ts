@@ -153,4 +153,86 @@ test.describe('Wololo Converter App', () => {
     await expect(page.getByText('Live replay')).toBeVisible()
     await expect(page.getByText('Connection lost')).toHaveCount(0)
   })
+
+  test('should collapse repeated links into one queue item', async ({ page }) => {
+    await page.route('**/api/preview', (route) => route.fulfill({ status: 400, json: { detail: 'skip' } }))
+    await page.route('**/api/download', () => new Promise(() => {})) // stays pending
+
+    const links = [
+      'https://youtu.be/XIhEPwTMjWk',
+      'https://www.youtube.com/watch?v=XIhEPwTMjWk&t=30',
+      'https://m.youtube.com/shorts/XIhEPwTMjWk',
+    ]
+    await page.locator('textarea').fill(links.join('\n'))
+    await expect(page.getByText('2 duplicates ignored')).toBeVisible()
+    await page.locator('button', { hasText: /Add 1 URL/ }).click()
+    await expect(page.getByRole('status')).toHaveText('3 links → 1 added, 2 duplicates')
+    await expect(page.getByTestId('queue-item')).toHaveCount(1)
+
+    // The same video again: nothing new, the existing item is pointed out
+    await page.locator('textarea').fill('https://youtu.be/XIhEPwTMjWk')
+    await page.locator('button', { hasText: /Add 1 URL/ }).click()
+    await expect(page.getByRole('status')).toHaveText('Already in the queue')
+    await expect(page.getByTestId('queue-item')).toHaveCount(1)
+  })
+
+  test('should warn about a video too large for the chosen quality', async ({ page }) => {
+    const GB = 1_000_000_000
+    await page.route('**/api/preview', (route) =>
+      route.fulfill({
+        json: {
+          title: '4K UHD 10 hours', thumbnail_url: null, duration: 36000,
+          available_qualities: [360, 480, 720, 1080],
+          sizes: { '1080p': 6.9 * GB, '720p': 2.3 * GB, '480p': 1.7 * GB, '360p': 1.3 * GB, mp3: 1.44 * GB },
+          size_limit: 4 * GB,
+        },
+      }),
+    )
+    let started: unknown = null
+    await page.route('**/api/download', async (route) => {
+      started = route.request().postDataJSON()
+      await new Promise(() => {})
+    })
+
+    await page.locator('textarea').fill('https://youtu.be/XIhEPwTMjWk')
+    const button1080 = page.getByRole('button', { name: /1080p/ })
+    await expect(button1080).toBeDisabled()
+    await expect(button1080).toContainText('~6.9 GB')
+    await expect(page.getByRole('button', { name: /720p/ })).toContainText('~2.3 GB')
+
+    await page.getByRole('button', { name: /720p/ }).click()
+    await page.locator('button', { hasText: /Add 1 URL/ }).click()
+    await expect(page.getByTestId('queue-item')).toContainText('~2.3 GB')
+    await expect.poll(() => started).toEqual({ url: 'https://youtu.be/XIhEPwTMjWk', quality: '720p' })
+  })
+
+  test('should offer a quality that fits when the server refuses a large video', async ({ page }) => {
+    await page.route('**/api/preview', (route) => route.fulfill({ status: 400, json: { detail: 'skip' } }))
+    const requests: string[] = []
+    await page.route('**/api/download', (route) => {
+      const quality = route.request().postDataJSON().quality
+      requests.push(quality)
+      return route.fulfill({ json: { job_id: `job-${quality}`, message: 'Download started', status: 'queued' } })
+    })
+    await page.route('**/api/jobs/job-1080p/progress', (route) =>
+      route.fulfill({
+        headers: { 'Content-Type': 'text/event-stream' },
+        body:
+          'event: complete\ndata: ' +
+          JSON.stringify({
+            job_id: 'job-1080p', status: 'failed', progress: 0, download_ready: false,
+            error_message: 'This video is too large: ~6.9 GB at 1080p (limit 4 GB). Try 720p (~2.3 GB).',
+            estimated_size: 6.9e9, suggested_quality: '720p',
+          }) + '\n\n',
+      }),
+    )
+    await page.route('**/api/jobs/job-720p/progress', () => new Promise(() => {}))
+
+    await page.locator('textarea').fill('https://youtu.be/XIhEPwTMjWk')
+    await page.getByRole('button', { name: /1080p/ }).click()
+    await page.locator('button', { hasText: /Add 1 URL/ }).click()
+    await expect(page.getByText(/This video is too large/)).toBeVisible()
+    await page.getByRole('button', { name: 'Switch to 720p' }).click()
+    await expect.poll(() => requests).toEqual(['1080p', '720p'])
+  })
 })

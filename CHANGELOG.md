@@ -3,6 +3,31 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.15.0] - 2026-11-17
+
+### Added
+
+- The quality options show the estimated size of the video, and the
+  qualities over the 4 GB limit can't be picked. Queue items show their
+  estimated size too.
+- Pasting the same video more than once (in any link format) adds it once,
+  and the page says how many duplicates were skipped. Adding a video that is
+  already in the queue points to the existing item.
+- A video that is too large is refused before downloading, with the best
+  quality that fits and a button to switch to it.
+- Recently downloaded videos are served again from a cache, without
+  downloading them a second time. Requests for a video that is already
+  downloading join that download.
+- Each visitor can have up to 3 downloads running at once, and new downloads
+  wait when the server is low on storage.
+
+### Fixed
+
+- A video larger than the size limit could finish as "completed" with only
+  its audio. It now fails with a clear message.
+- The admin history showed running downloads as queued.
+- Downloads started at the same moment could go missing from the history.
+
 ## [0.14.2] - 2026-11-17
 
 ### Fixed

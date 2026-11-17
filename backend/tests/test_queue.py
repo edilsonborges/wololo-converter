@@ -265,16 +265,25 @@ async def queued_api(downloads, monkeypatch, db_session):
                 await session.commit()
 
     monkeypatch.setattr(routes, "get_db_context", test_db_context)
+    # Its write would land mid-request on the single shared test connection
+    # (StaticPool) and reset the request's transaction; tested on its own
+    started = []
+
+    async def record_start(progress):
+        started.append(progress.job_id)
+
+    monkeypatch.setattr(routes, "persist_job_started", record_start)
     routes.limiter.reset()
     yield downloads
     downloads.tasks.extend(tasks.values())
     routes.limiter.reset()
 
 
-async def test_fourth_request_queues_and_cancel_is_persisted(client, queued_api, db_session):
+async def test_fourth_request_queues_and_cancel_is_persisted(client, queued_api, db_session, monkeypatch):
+    monkeypatch.setattr(settings, "max_active_downloads_per_client", 10)
     responses = [
-        await client.post("/api/download", json={"url": VIDEO_URL, "quality": "720p"})
-        for _ in range(4)
+        await client.post("/api/download", json={"url": f"{VIDEO_URL}{n}", "quality": "720p"})
+        for n in range(4)
     ]
     assert [response.status_code for response in responses] == [200, 200, 200, 200]
     await wait_until(lambda: len(queued_api.started) == 3)
@@ -302,8 +311,8 @@ async def test_full_queue_returns_429_without_persisting_rejected_job(
     monkeypatch.setattr(settings, "max_concurrent_downloads", 1)
     monkeypatch.setattr(settings, "max_queued_downloads", 1)
     responses = [
-        await client.post("/api/download", json={"url": VIDEO_URL})
-        for _ in range(3)
+        await client.post("/api/download", json={"url": f"{VIDEO_URL}{n}"})
+        for n in range(3)
     ]
     assert [response.status_code for response in responses] == [200, 200, 429]
     assert responses[2].json()["detail"] == "Download queue is full. Please try again later."
@@ -334,3 +343,25 @@ async def test_polling_overlays_progress_without_dirtying_database_job(client, q
     await db_session.commit()
     await db_session.refresh(job)
     assert job.status == JobStatus.COMPLETED.value
+
+
+async def test_started_job_is_stored_as_downloading(db_session, monkeypatch):
+    """The admin view reads the stored status: a job picked up by a slot
+    must not keep showing as queued."""
+    from app.download_service import DownloadProgress
+
+    job = DownloadJob(id="started-job", url=VIDEO_URL, platform="youtube", output_format="video",
+                      quality="720p", status=JobStatus.QUEUED.value)
+    db_session.add(job)
+    await db_session.commit()
+
+    @asynccontextmanager
+    async def same_session():
+        yield db_session
+        await db_session.commit()
+
+    monkeypatch.setattr(routes, "get_db_context", same_session)
+    await routes.persist_job_started(DownloadProgress("started-job"))
+    await db_session.refresh(job)
+    assert job.status == JobStatus.DOWNLOADING.value
+    assert job.started_at is not None

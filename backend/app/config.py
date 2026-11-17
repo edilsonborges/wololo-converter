@@ -16,8 +16,15 @@ class Settings(BaseSettings):
 
     # File storage
     temp_dir: Path = Path("/tmp/wololo")
-    max_file_age_hours: int = 1
+    max_file_age_hours: int = 1  # partial downloads and leftovers
     cleanup_interval_minutes: int = 15
+    # Finished files are kept as a cache: a repeated request (same video and
+    # quality) is answered from it without downloading again. Least recently
+    # used files go first once the cache passes its size.
+    cache_max_gb: float = Field(default=10, ge=0)
+    cache_max_age_hours: int = Field(default=72, ge=1)
+    # New downloads are refused while the disk has less free space than this
+    min_free_disk_mb: int = Field(default=2048, ge=0)
 
     # Download settings
     max_concurrent_downloads: int = Field(default=3, ge=1)
@@ -26,7 +33,14 @@ class Settings(BaseSettings):
     # GET /api/download waits this long for the file before answering 202
     # (kept well under proxy limits such as Cloudflare's 100 s)
     link_download_wait_seconds: float = Field(default=25, ge=0)
-    max_file_size_mb: int = 10000  # 10GB for 4K videos
+    # Largest download allowed, checked against the size the platform reports
+    # before downloading (and enforced per file while downloading)
+    max_file_size_mb: int = Field(default=4000, ge=1)
+    # Applies when the size can't be estimated
+    max_duration_minutes: int = Field(default=180, ge=1)
+    # Downloads one visitor (IP) may have running or queued at once; requests
+    # with an access key are exempt
+    max_active_downloads_per_client: int = Field(default=3, ge=1)
 
     # Browser cookies for platforms that require auth
     # Options: "chrome", "firefox", "safari", "edge", "brave", "opera", "chromium", "" to disable
