@@ -3,6 +3,13 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.11.1] - 2026-11-17
+
+### Fixed
+
+- `/api/openapi.json` returned 404 through the website: the rule for missing
+  `.json` files took precedence over the API proxy.
+
 ## [0.11.0] - 2026-11-16
 
 ### Added
