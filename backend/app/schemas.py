@@ -124,6 +124,24 @@ class DownloadStartResponse(BaseModel):
     status: JobStatus
 
 
+class DownloadAcceptedResponse(BaseModel):
+    """Response of GET /api/download when the file isn't ready yet"""
+    job_id: str
+    status: JobStatus
+    message: str
+    status_url: str = Field(description="Poll with GET until status is completed or failed")
+    download_url: str = Field(description="GET once status is completed to receive the file")
+    progress_url: str = Field(description="Server-sent events with live progress")
+    retry_after_seconds: int
+
+
+class DownloadFailedResponse(BaseModel):
+    """Response of GET /api/download when the job failed within the wait"""
+    job_id: str
+    status: JobStatus
+    detail: str
+
+
 class ErrorResponse(BaseModel):
     """Standard error response"""
     error: str

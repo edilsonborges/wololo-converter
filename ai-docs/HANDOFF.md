@@ -88,6 +88,9 @@ Hoje: backend 146 testes, frontend 60 unitários + 15 Playwright (CI verde).
 Base: `https://wololo.edilson.dev` (produção) — rotas sob `/api`.
 
 ```http
+GET  /api/download?url=<URL codificada>[&quality=...]   (padrão 720p; desde a v0.11.0)
+  200 → o arquivo · 202 → {"job_id","status","status_url","download_url","progress_url","retry_after_seconds"}
+  422 → falhou {"job_id","status","detail"} · contrato: /api/openapi.json · guia: /llms.txt
 POST /api/download        {"url": "<link>", "quality": "360p|480p|720p|1080p|mp3"}
   200 → {"job_id": "uuid", "message": "Download started", "status": "queued"}
   400 → {"detail": "<motivo>"} (URL inválida/plataforma não suportada)

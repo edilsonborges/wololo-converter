@@ -1,0 +1,8 @@
+# Wololo Converter
+# The home page and the agent docs may be crawled. API calls start real
+# downloads, so crawlers must not follow them (the contract is fine).
+User-agent: *
+Allow: /$
+Allow: /llms.txt
+Allow: /api/openapi.json
+Disallow: /api/

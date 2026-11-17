@@ -62,9 +62,18 @@ async def lifespan(app: FastAPI):
 # Create FastAPI app
 app = FastAPI(
     title=settings.app_name,
-    description="Personal video/audio downloader for YouTube, Instagram, Facebook, and Twitter/X",
+    description=(
+        "Video and audio downloader for YouTube, Instagram, TikTok, Twitter/X, Threads "
+        "and Facebook. Quickest start: `GET /api/download?url=<percent-encoded URL>` "
+        "returns the MP4 (720p by default) or a `202` with a job to follow. "
+        "Agent guide: `/llms.txt`."
+    ),
     version=APP_VERSION,
     lifespan=lifespan,
+    # Under /api so the public proxy (which only forwards /api) serves them
+    openapi_url="/api/openapi.json",
+    docs_url="/api/docs",
+    redoc_url=None,
 )
 
 # Add rate limiter
@@ -106,7 +115,8 @@ async def root():
     return {
         "name": settings.app_name,
         "version": APP_VERSION,
-        "docs": "/docs",
+        "docs": "/api/docs",
+        "openapi": "/api/openapi.json",
         "health": "/api/health",
     }
 
