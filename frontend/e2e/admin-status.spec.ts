@@ -10,19 +10,16 @@ function days(count: number, status: string, extra: Record<string, unknown> = {}
 }
 
 async function mockStatus(page: Page) {
+  const history = days(90, 'operational')
+  history[60] = { ...history[60], status: 'outage', uptime: 93.99, note: 'Estimated from tunnel log: tunnel restart', estimated: true }
   await page.route('**/api/status', (route) =>
     route.fulfill({
       json: {
-        status: 'degraded',
+        status: 'operational',
         generated_at: new Date().toISOString(),
         days: 90,
         components: [
-          { id: 'website', name: 'Website', group: 'Service', status: 'operational', uptime: 99.98, latency_ms: 5, days: days(90, 'operational') },
-          { id: 'api', name: 'API', group: 'Service', status: 'operational', uptime: 100, latency_ms: 2, days: days(90, 'operational') },
-          {
-            id: 'tiktok', name: 'TikTok', group: 'Downloads', status: 'degraded', uptime: 60, latency_ms: null,
-            days: days(90, 'degraded', { completed: 3, failed: 2 }),
-          },
+          { id: 'website', name: 'Website', group: 'Service', status: 'operational', uptime: 99.93, latency_ms: 5, days: history },
         ],
       },
     }),
@@ -30,18 +27,19 @@ async function mockStatus(page: Page) {
 }
 
 test.describe('Status page', () => {
-  test('shows components, uptime and a day tooltip', async ({ page }) => {
+  test('shows the website, its uptime and a day tooltip', async ({ page }) => {
     await mockStatus(page)
     await page.goto('/status')
-    await expect(page.getByText('Some systems are degraded')).toBeVisible()
+    await expect(page.getByText('All systems operational')).toBeVisible()
     await expect(page.getByRole('heading', { name: /Website/ })).toBeVisible()
-    await expect(page.getByText('99.98% uptime')).toBeVisible()
-    await expect(page.getByText('60.00% success')).toBeVisible()
+    await expect(page.getByText('99.93% uptime')).toBeVisible()
+    await expect(page.getByText(/Downloads by platform/)).toHaveCount(0)
 
-    const tiktokDays = page.getByRole('list', { name: /TikTok/ }).getByRole('listitem')
-    await expect(tiktokDays).toHaveCount(90)
-    await tiktokDays.last().hover()
-    await expect(page.getByText('3 of 5 downloads succeeded')).toBeVisible()
+    const websiteDays = page.getByRole('list', { name: /Website/ }).getByRole('listitem')
+    await expect(websiteDays).toHaveCount(90)
+    await websiteDays.nth(60).hover()
+    await expect(page.getByText('~93.99% uptime (estimated)')).toBeVisible()
+    await expect(page.getByText('Estimated from tunnel log: tunnel restart')).toBeVisible()
   })
 
   test('home footer links to the status page', async ({ page }) => {

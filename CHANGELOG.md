@@ -3,6 +3,12 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.14.2] - 2026-11-17
+
+### Fixed
+
+- Bug fixes.
+
 ## [0.14.1] - 2026-11-17
 
 ### Changed
