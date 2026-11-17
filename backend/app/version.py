@@ -1,3 +1,3 @@
 """Application version shared by API metadata and health checks."""
 
-APP_VERSION = "0.14.2"
+APP_VERSION = "0.15.0"

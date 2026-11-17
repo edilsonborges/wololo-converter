@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, type FC, type DragEvent } from 'react';
-import type { QueueItem, QueueConfig, QueueProcessingMode, JobStatus } from '../types';
+import type { QueueItem, QueueConfig, QueueProcessingMode, JobStatus, VideoQuality } from '../types';
+import { formatSize } from '../size';
 import { PLATFORMS } from '../types';
 import { Icon, PlatformIcon } from './Icon';
 import { SmoothProgressBar } from './SmoothProgressBar';
@@ -13,6 +14,9 @@ interface QueueManagerProps {
   onRemove: (id: string) => void;
   onCancel: (id: string) => void;
   onRetry: (id: string) => void;
+  onSwitchQuality?: (id: string, quality: VideoQuality) => void;
+  /** Items to flash briefly (e.g. the one a duplicate link points to) */
+  highlightIds?: string[];
   onDownload: (jobId: string) => void;
   onExtractAudio: (jobId: string) => void;
   extractingAudio: Set<string>;
@@ -47,6 +51,8 @@ export const QueueManager: FC<QueueManagerProps> = ({
   onRemove,
   onCancel,
   onRetry,
+  onSwitchQuality,
+  highlightIds = [],
   onDownload,
   onExtractAudio,
   extractingAudio,
@@ -126,10 +132,12 @@ export const QueueManager: FC<QueueManagerProps> = ({
     const platformInfo = item.platform ? PLATFORMS[item.platform] : null;
     const progress = item.progress;
     const showProgress = item.status === 'active' && progress;
+    const highlighted = highlightIds.includes(item.id);
 
     return (
       <div
         key={item.id}
+        data-testid="queue-item"
         draggable={isDraggable && item.status === 'pending'}
         onDragStart={(e) => handleDragStart(e, index)}
         onDragEnd={handleDragEnd}
@@ -140,6 +148,7 @@ export const QueueManager: FC<QueueManagerProps> = ({
           relative p-3 rounded-lg bg-surface-secondary border border-border-light
           ${isDraggable && item.status === 'pending' ? 'cursor-grab active:cursor-grabbing' : ''}
           ${dragOverIndex === index ? 'border-accent border-2' : ''}
+          ${highlighted ? 'ring-2 ring-accent animate-pulse' : ''}
           transition-all duration-200
         `}
       >
@@ -173,6 +182,14 @@ export const QueueManager: FC<QueueManagerProps> = ({
                   {item.quality}
                 </span>
               )}
+              {item.estimatedSize ? (
+                <span
+                  className="text-xs text-text-muted tabular-nums flex-shrink-0"
+                  title="Estimated size"
+                >
+                  ~{formatSize(item.estimatedSize)}
+                </span>
+              ) : null}
               {(item.progress?.title || item.label) && (
                 <span className="text-sm text-text-primary font-medium truncate">
                   {item.progress?.title || item.label}
@@ -206,8 +223,17 @@ export const QueueManager: FC<QueueManagerProps> = ({
 
             {/* Error message for failed items */}
             {item.status === 'failed' && item.error && (
-              <div className="mt-2 text-xs text-error-text">
-                {item.error}
+              <div className="mt-2 text-xs text-error-text flex flex-wrap items-center gap-2" role="alert">
+                <span>{item.error}</span>
+                {item.suggestedQuality && onSwitchQuality && (
+                  <button
+                    type="button"
+                    onClick={() => onSwitchQuality(item.id, item.suggestedQuality!)}
+                    className="px-2 py-0.5 rounded border border-border bg-white text-text-primary hover:border-accent hover:text-accent transition-colors"
+                  >
+                    Switch to {item.suggestedQuality === 'mp3' ? 'MP3' : item.suggestedQuality}
+                  </button>
+                )}
               </div>
             )}
           </div>

@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { api, ApiError } from '../api';
-import type { QueueItem, QueueConfig, VideoQuality, JobProgressUpdate, QueueItemStatus } from '../types';
+import type { QueueItem, QueueConfig, VideoQuality, JobProgressUpdate, QueueItemStatus, PreviewResponse } from '../types';
+import { mediaKey } from '../urlParser';
+import { checkSize } from '../size';
 
 interface ParsedURL {
   url: string;
@@ -10,7 +12,24 @@ interface ParsedURL {
 
 interface AddToQueueOptions {
   autoDownload?: boolean;
+  /** Size estimates of the (single) link, from its preview */
+  preview?: Pick<PreviewResponse, 'sizes' | 'size_limit'> | null;
 }
+
+export interface AddToQueueResult {
+  added: number;
+  /** Links skipped because the same video and quality is already queued */
+  duplicates: number;
+  /** Queue items those duplicates point to (to highlight them) */
+  duplicateIds: string[];
+}
+
+// Items that still stand for a download of their video: a failed or
+// cancelled one may be added again
+const KEEPS_ITS_PLACE: QueueItemStatus[] = ['pending', 'active', 'completed'];
+
+const itemKey = (url: string, platform: string | null, quality: VideoQuality) =>
+  `${mediaKey(url, platform)}|${quality}`;
 
 // Generate unique ID
 function generateId(): string {
@@ -37,25 +56,86 @@ export function useQueueManager() {
   }, []);
 
   // Add URLs to queue
+  // Read synchronously by addToQueue to find duplicates
+  const itemsRef = useRef<QueueItem[]>([]);
+  itemsRef.current = items;
+
   const addToQueue = useCallback((
     parsedUrls: ParsedURL[],
     quality: VideoQuality,
     options: AddToQueueOptions = {},
-  ) => {
+  ): AddToQueueResult => {
     const validUrls = parsedUrls.filter((u) => u.isValid);
+    const queued = new Map<string, string>();
+    for (const item of itemsRef.current) {
+      if (KEEPS_ITS_PLACE.includes(item.status) && !item.musicLink) {
+        queued.set(itemKey(item.url, item.platform, item.quality), item.id);
+      }
+    }
 
-    const newItems: QueueItem[] = validUrls.map((parsed) => ({
-      id: generateId(),
-      url: parsed.url,
-      platform: parsed.platform,
-      quality,
-      status: 'pending' as QueueItemStatus,
-      addedAt: Date.now(),
-      autoDownload: options.autoDownload,
-    }));
+    const newItems: QueueItem[] = [];
+    const duplicateIds: string[] = [];
+    let duplicates = 0;
+    const size = checkSize(options.preview, quality);
+    for (const parsed of validUrls) {
+      const key = itemKey(parsed.url, parsed.platform, quality);
+      const existing = queued.get(key);
+      if (existing) {
+        duplicates += 1;
+        if (!duplicateIds.includes(existing)) duplicateIds.push(existing);
+        continue;
+      }
+      const now = Date.now();
+      const item: QueueItem = {
+        id: generateId(),
+        url: parsed.url,
+        platform: parsed.platform,
+        quality,
+        status: 'pending',
+        addedAt: now,
+        autoDownload: options.autoDownload,
+        estimatedSize: size.size,
+      };
+      if (size.tooLarge) {
+        // Known to be over the limit: don't start it, offer a quality that fits
+        Object.assign(item, {
+          status: 'failed',
+          error: size.message,
+          suggestedQuality: size.suggestion?.quality,
+          completedAt: now,
+        });
+      }
+      queued.set(key, item.id);
+      newItems.push(item);
+    }
 
-    setItems((prev) => [...prev, ...newItems]);
-    return newItems.length;
+    if (newItems.length) {
+      itemsRef.current = [...itemsRef.current, ...newItems];
+      setItems((prev) => [...prev, ...newItems]);
+    }
+    return { added: newItems.length, duplicates, duplicateIds };
+  }, []);
+
+  // Retry a too-large item at a quality that fits
+  const switchQuality = useCallback((id: string, quality: VideoQuality) => {
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              quality,
+              status: 'pending',
+              error: undefined,
+              suggestedQuality: undefined,
+              estimatedSize: undefined,
+              jobId: undefined,
+              progress: undefined,
+              startedAt: undefined,
+              completedAt: undefined,
+            }
+          : item
+      )
+    );
   }, []);
 
   // Resolve a music link item into one pending MP3 item per track found on
@@ -276,7 +356,10 @@ export function useQueueManager() {
       // Subscribe to progress updates
       const cleanup = api.subscribeToProgress(response.job_id, {
         onProgress: (update: JobProgressUpdate) => {
-          updateItem(item.id, { progress: update });
+          updateItem(item.id, {
+            progress: update,
+            ...(update.estimated_size ? { estimatedSize: update.estimated_size } : {}),
+          });
         },
         onComplete: (update: JobProgressUpdate) => {
           updateItem(item.id, {
@@ -284,6 +367,8 @@ export function useQueueManager() {
             status: update.status === 'completed' ? 'completed' : 'failed',
             error: update.error_message,
             completedAt: Date.now(),
+            ...(update.estimated_size ? { estimatedSize: update.estimated_size } : {}),
+            ...(update.suggested_quality ? { suggestedQuality: update.suggested_quality } : {}),
           });
 
           // Cleanup SSE ref
@@ -403,6 +488,7 @@ export function useQueueManager() {
     reorderItems,
     cancelItem,
     retryItem,
+    switchQuality,
     clearCompleted,
     downloadFile,
     extractAudio,

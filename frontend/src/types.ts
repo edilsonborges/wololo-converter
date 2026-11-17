@@ -22,6 +22,10 @@ export interface PreviewResponse {
   thumbnail_url: string;
   duration: number;
   available_qualities: number[];
+  /** Estimated bytes per quality ('360p'..'1080p', 'mp3'), when known */
+  sizes?: Partial<Record<VideoQuality, number>>;
+  /** Largest download the server accepts, in bytes */
+  size_limit?: number | null;
 }
 
 export type JobStatus =
@@ -69,6 +73,9 @@ export interface JobProgressUpdate {
   title?: string;
   error_message?: string;
   download_ready: boolean;
+  estimated_size?: number | null;
+  /** Set when the download was refused as too large: a quality that fits */
+  suggested_quality?: VideoQuality | null;
 }
 
 export interface URLValidationResponse {
@@ -149,6 +156,10 @@ export interface QueueItem {
   startedAt?: number;
   completedAt?: number;
   autoDownload?: boolean;
+  /** Estimated size in bytes, known from the preview or the server */
+  estimatedSize?: number;
+  /** When too large: the best quality that fits the server's limit */
+  suggestedQuality?: VideoQuality;
 }
 
 export interface QueueConfig {

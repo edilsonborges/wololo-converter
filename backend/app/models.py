@@ -78,6 +78,15 @@ class DownloadJob(Base):
     source = Column(String(20), nullable=True)
     user_agent = Column(String(500), nullable=True)
 
+    # Same video regardless of how the link was written (utils.media_key);
+    # used to share running downloads and to answer from the file cache
+    media_key = Column(String(300), nullable=True)
+    estimated_size = Column(Integer, nullable=True)  # bytes, reported before downloading
+    # Requests that joined this download while it was running (1 = just one)
+    request_count = Column(Integer, nullable=True, default=1)
+    # Answered from the cache: id of the job whose file was reused
+    reused_from = Column(String(36), nullable=True)
+
     # Timestamps
     created_at = Column(DateTime, default=utcnow)
     started_at = Column(DateTime, nullable=True)

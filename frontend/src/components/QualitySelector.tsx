@@ -1,11 +1,16 @@
 import type { FC } from 'react';
 import type { VideoQuality } from '../types';
 import { Icon } from './Icon';
+import { formatSize } from '../size';
 
 interface QualitySelectorProps {
   selectedQuality: VideoQuality;
   onQualityChange: (quality: VideoQuality) => void;
   availableQualities?: number[];
+  /** Estimated size per quality, from the preview */
+  sizes?: Partial<Record<VideoQuality, number>>;
+  /** Largest download the server accepts, in bytes */
+  sizeLimit?: number | null;
   disabled?: boolean;
 }
 
@@ -21,8 +26,16 @@ export const QualitySelector: FC<QualitySelectorProps> = ({
   selectedQuality,
   onQualityChange,
   availableQualities,
+  sizes,
+  sizeLimit,
   disabled,
 }) => {
+  const sizeOf = (value: VideoQuality) => sizes?.[value];
+  const isTooLarge = (value: VideoQuality) => {
+    const size = sizeOf(value);
+    return size != null && !!sizeLimit && size > sizeLimit;
+  };
+
   const isOptionAvailable = (option: typeof QUALITY_OPTIONS[number]): boolean => {
     // MP3 is always available
     if (!option.resolution) return true;
@@ -39,9 +52,11 @@ export const QualitySelector: FC<QualitySelectorProps> = ({
       </label>
       <div className="flex flex-wrap gap-2">
         {QUALITY_OPTIONS.map((option) => {
-          const available = isOptionAvailable(option);
+          const tooLarge = isTooLarge(option.value);
+          const available = isOptionAvailable(option) && !tooLarge;
           const isSelected = selectedQuality === option.value;
           const isDisabled = disabled || !available;
+          const size = sizeOf(option.value);
 
           return (
             <button
@@ -49,7 +64,13 @@ export const QualitySelector: FC<QualitySelectorProps> = ({
               type="button"
               onClick={() => onQualityChange(option.value)}
               disabled={isDisabled}
-              title={!available ? 'Qualidade não disponível para este vídeo' : undefined}
+              title={
+                tooLarge
+                  ? `Too large (~${formatSize(size!)}, limit ${formatSize(sizeLimit!)})`
+                  : !available
+                    ? 'Qualidade não disponível para este vídeo'
+                    : undefined
+              }
               className={`
                 relative px-4 py-2.5 rounded-lg border-2 text-center transition-all duration-200
                 ${
@@ -67,7 +88,9 @@ export const QualitySelector: FC<QualitySelectorProps> = ({
                 <div className={`font-medium text-sm ${isSelected ? 'text-accent' : !available ? 'text-text-muted' : 'text-text-primary'}`}>
                   {option.label}
                 </div>
-                <div className="text-xs text-text-muted truncate">{option.description}</div>
+                <div className="text-xs text-text-muted truncate">
+                  {size != null ? `~${formatSize(size)}` : option.description}
+                </div>
               </div>
 
               {isSelected && (

@@ -262,6 +262,22 @@ function JobsTable({ jobs }: { jobs: AdminJob[] }) {
                 >
                   {job.status}
                 </span>
+                {job.request_count > 1 && (
+                  <span
+                    className="ml-1 inline-block rounded px-1.5 py-0.5 text-xs bg-warning-light text-warning-text tabular-nums"
+                    title={`${job.request_count} requests shared this download`}
+                  >
+                    ×{job.request_count}
+                  </span>
+                )}
+                {job.reused_from && (
+                  <span
+                    className="ml-1 inline-block rounded px-1.5 py-0.5 text-xs bg-surface-tertiary text-text-secondary"
+                    title="Served from the cache, without downloading again"
+                  >
+                    cache
+                  </span>
+                )}
               </td>
               <td className="py-2 px-3 max-w-xs">
                 <a
@@ -285,7 +301,12 @@ function JobsTable({ jobs }: { jobs: AdminJob[] }) {
               </td>
               <td className="py-2 px-3 text-text-secondary">{job.quality ?? '—'}</td>
               <td className="py-2 px-3 text-right tabular-nums text-text-secondary">{formatDuration(job.duration)}</td>
-              <td className="py-2 px-3 text-right tabular-nums text-text-secondary">{formatBytes(job.file_size)}</td>
+              <td
+                className="py-2 px-3 text-right tabular-nums text-text-secondary"
+                title={job.estimated_size ? `Estimated before downloading: ${formatBytes(job.estimated_size)}` : undefined}
+              >
+                {job.file_size ? formatBytes(job.file_size) : job.estimated_size ? `~${formatBytes(job.estimated_size)}` : '—'}
+              </td>
               <td className="py-2 px-3 text-right tabular-nums text-text-secondary">{formatDuration(job.elapsed_seconds)}</td>
               <td className="py-2 px-3 text-right tabular-nums text-text-secondary">{formatDuration(job.queued_seconds)}</td>
               <td className="py-2 px-3 whitespace-nowrap tabular-nums text-text-secondary">{job.client_ip ?? '—'}</td>

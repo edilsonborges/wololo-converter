@@ -15,17 +15,18 @@ from yt_dlp.postprocessor import PostProcessor
 from .config import settings
 from .models import JobStatus, OutputFormat, VideoQuality, DownloadJob, utcnow
 from .schemas import JobProgressUpdate
-from .utils import get_safe_filepath, sanitize_filename, validate_url, detect_platform
+from .utils import TEMP_SUFFIXES, get_safe_filepath, sanitize_filename, validate_url, detect_platform
+from .sizing import DownloadRejected, check_download, estimate_quality_sizes, size_limit_bytes, video_format_spec, format_bytes
 from .threads_extractor import extract_threads_info
 
 
 logger = logging.getLogger(__name__)
 
+VIDEO_SUFFIXES = (".mp4", ".webm", ".mkv", ".mov")
+
 # Thread pool for running yt-dlp (it's not async-native)
 executor = ThreadPoolExecutor(max_workers=settings.max_concurrent_downloads)
 
-# yt-dlp intermediate artifacts that are never a finished output
-TEMP_SUFFIXES = (".part", ".ytdl", ".temp")
 
 
 class DownloadQueueFull(Exception):
@@ -130,7 +131,8 @@ class DownloadProgress:
 
     def __init__(self, job_id: str, callback: Optional[Callable[[JobProgressUpdate], Any]] = None):
         self.job_id = job_id
-        self.callback = callback
+        # Every open progress stream of this job (several when requests share it)
+        self.callbacks: list[Callable[[JobProgressUpdate], Any]] = [callback] if callback else []
         self.status = JobStatus.QUEUED
         self.progress = 0.0
         self.speed: Optional[str] = None
@@ -152,6 +154,17 @@ class DownloadProgress:
         # Streams yt-dlp downloads separately (video, then audio), captured
         # right before the download starts; progress hooks only see one at a time
         self.requested_formats: list[dict] = []
+        # Set by the caller; used to share a running download between requests
+        self.media_key: Optional[str] = None
+        self.quality: Optional[VideoQuality] = None
+        self.client: Optional[str] = None  # visitor IP, for the per-client limit
+        self.holders = 1  # requests waiting on this job; cancel stops it at 0
+        # Resolves to the job's task once it exists (None if it never started),
+        # so a request that joins while the job is being stored can wait for it
+        self.task_ready: Optional[asyncio.Future] = None
+        # Known right before the download starts
+        self.estimated_size: Optional[int] = None
+        self.suggested_quality: Optional[str] = None
 
     @property
     def cancelled(self) -> bool:
@@ -162,22 +175,29 @@ class DownloadProgress:
         if self.cancel_event.is_set():
             raise yt_dlp.utils.DownloadCancelled("Cancelled by user")
 
+    def snapshot(self, download_ready: bool = False) -> JobProgressUpdate:
+        return JobProgressUpdate(
+            job_id=self.job_id,
+            status=self.status,
+            progress=round(self.progress, 1),
+            speed=self.speed,
+            eta=self.eta,
+            current_stage=self.current_stage,
+            title=self.title,
+            error_message=self.error_message,
+            download_ready=download_ready,
+            estimated_size=self.estimated_size,
+            suggested_quality=self.suggested_quality,
+        )
+
     def _notify(self, download_ready: bool = False):
-        """Send progress update via callback"""
-        if self.callback:
-            update = JobProgressUpdate(
-                job_id=self.job_id,
-                status=self.status,
-                progress=round(self.progress, 1),
-                speed=self.speed,
-                eta=self.eta,
-                current_stage=self.current_stage,
-                title=self.title,
-                error_message=self.error_message,
-                download_ready=download_ready,
-            )
+        """Send a progress update to every subscriber"""
+        if not self.callbacks:
+            return
+        update = self.snapshot(download_ready)
+        for callback in list(self.callbacks):
             try:
-                self.callback(update)
+                callback(update)
             except Exception:
                 pass
 
@@ -345,16 +365,46 @@ class DownloadProgress:
 
 
 class _CaptureRequestedFormats(PostProcessor):
-    """Runs right before the download and records which streams (video,
-    audio) will be fetched, so progress can be combined into one bar."""
+    """Runs right before the download: records which streams (video, audio)
+    will be fetched, so progress can be combined into one bar, and refuses
+    the job when it is too large or the disk can't take it."""
 
     def __init__(self, progress: "DownloadProgress"):
         super().__init__()
         self._progress = progress
 
     def run(self, info):
-        self._progress.requested_formats = list(info.get("requested_formats") or [])
+        progress = self._progress
+        progress.requested_formats = list(info.get("requested_formats") or [])
+        if progress.quality is not None:
+            progress.estimated_size = check_download(info, progress.quality, self._downloader)
+            _ensure_disk_space(progress.estimated_size, progress.job_id)
         return [], info
+
+
+def _ensure_disk_space(estimated_size: Optional[int], job_id: str) -> None:
+    """Make room for a download (merging needs about twice its size) and
+    refuse it when the disk can't take it even after trimming the cache."""
+    if not estimated_size:
+        return
+    from .utils import enforce_storage, free_disk_bytes
+
+    needed = estimated_size * 2
+    reserve = settings.min_free_disk_mb * 1024 * 1024
+    if free_disk_bytes() - reserve >= needed:
+        return
+    try:
+        active = set(download_service.active_jobs) | {job_id}
+    except RuntimeError:  # the dict changed while copying; skip the trim
+        active = None
+    if active is not None:
+        enforce_storage(active, needed)
+    if free_disk_bytes() - reserve < needed:
+        raise DownloadRejected(
+            "The server doesn't have enough free space for this download right now. "
+            "Please try again later or pick a lower quality.",
+            estimated_size,
+        )
 
 
 class DownloadService:
@@ -369,26 +419,57 @@ class DownloadService:
         # Keep a bounded terminal snapshot so fast downloads that finish before
         # the browser opens the SSE stream can still replay their final state.
         self.completed_jobs: Dict[str, DownloadProgress] = {}
-        self.progress_callbacks: Dict[str, Callable[[JobProgressUpdate], Any]] = {}
+        self.progress_callbacks: Dict[str, list[Callable[[JobProgressUpdate], Any]]] = {}
+        # (media key, quality) -> job id of the running download, so repeated
+        # requests for the same video join it instead of downloading again
+        self._shared: Dict[tuple[str, VideoQuality], str] = {}
 
     def register_callback(self, job_id: str, callback: Callable[[JobProgressUpdate], Any]):
-        """Register a callback for job progress updates"""
-        self.progress_callbacks[job_id] = callback
+        """Subscribe to a job's progress (several subscribers may share a job)"""
+        self.progress_callbacks.setdefault(job_id, []).append(callback)
         completed = self.completed_jobs.get(job_id)
         if completed:
-            completed.callback = callback
-            completed._notify(download_ready=completed.status == JobStatus.COMPLETED)
+            try:
+                callback(completed.snapshot(download_ready=completed.status == JobStatus.COMPLETED))
+            except Exception:
+                pass
         elif job_id in self.active_jobs:
-            self.active_jobs[job_id].callback = callback
+            self.active_jobs[job_id].callbacks.append(callback)
 
-    def unregister_callback(self, job_id: str):
-        """Unregister a callback"""
-        self.progress_callbacks.pop(job_id, None)
-        if job_id in self.active_jobs and self.active_jobs[job_id].callback:
-            self.active_jobs[job_id].callback = None
-        completed = self.completed_jobs.pop(job_id, None)
-        if completed:
-            completed.callback = None
+    def unregister_callback(self, job_id: str, callback: Optional[Callable[[JobProgressUpdate], Any]] = None):
+        """Remove one subscriber (or all of them when no callback is given)"""
+        remaining = [
+            cb for cb in self.progress_callbacks.get(job_id, []) if callback is not None and cb is not callback
+        ]
+        if remaining:
+            self.progress_callbacks[job_id] = remaining
+        else:
+            self.progress_callbacks.pop(job_id, None)
+        progress = self.active_jobs.get(job_id)
+        if progress:
+            progress.callbacks = [
+                cb for cb in progress.callbacks if callback is not None and cb is not callback
+            ]
+        if not remaining:
+            self.completed_jobs.pop(job_id, None)
+
+    def find_shared(self, media_key: str, quality: VideoQuality) -> Optional[DownloadProgress]:
+        """The running download of this video and quality, if any."""
+        job_id = self._shared.get((media_key, quality))
+        progress = self.active_jobs.get(job_id) if job_id else None
+        if progress and not progress.cancelled:
+            return progress
+        return None
+
+    def active_for_client(self, client: str) -> int:
+        """Downloads a visitor has running or waiting."""
+        return sum(1 for p in self.active_jobs.values() if p.client == client and not p.cancelled)
+
+    def _release_key(self, progress: DownloadProgress) -> None:
+        if progress.media_key and progress.quality is not None:
+            key = (progress.media_key, progress.quality)
+            if self._shared.get(key) == progress.job_id:
+                self._shared.pop(key, None)
 
     def _remember_completed(self, progress: DownloadProgress):
         """Retain a bounded final state for late SSE subscribers."""
@@ -425,7 +506,7 @@ class DownloadService:
             "retries": 3,
             "fragment_retries": 3,
             # Security: limit file size
-            "max_filesize": settings.max_file_size_mb * 1024 * 1024,
+            "max_filesize": size_limit_bytes(),
             # No external downloaders for safety
             "external_downloader": None,
             # Restrict to HTTPS
@@ -473,12 +554,7 @@ class DownloadService:
                 ]
 
             opts.update({
-                "format": (
-                    f"bestvideo[height<={height}][vcodec^=avc1]+bestaudio[acodec^=mp4a]/"
-                    f"bestvideo[height<={height}]+bestaudio/"
-                    f"bestvideo[width<={height}]+bestaudio/"
-                    f"best[height<={height}]/best[width<={height}]/best"
-                ),
+                "format": video_format_spec(height),
                 "merge_output_format": "mp4",
                 "postprocessors": [{
                     "key": "FFmpegCopyStream",
@@ -638,6 +714,14 @@ class DownloadService:
                     return {"success": False, "error": live_reason}
 
                 output_file = self._find_output_file(job_id, info)
+                if quality != VideoQuality.MP3 and output_file.suffix.lower() not in VIDEO_SUFFIXES:
+                    # yt-dlp skips a stream over max_filesize without an error
+                    # and leaves the other one (the audio) as the "result"
+                    return {
+                        "success": False,
+                        "error": "The video is larger than the "
+                        f"{format_bytes(size_limit_bytes())} limit and was not downloaded",
+                    }
 
                 return {
                     "success": True,
@@ -649,7 +733,18 @@ class DownloadService:
                     "thumbnail_url": info.get("thumbnail"),
                 }
 
+        except DownloadRejected as e:
+            progress.estimated_size = e.estimated_size or progress.estimated_size
+            progress.suggested_quality = e.suggested_quality
+            return {"success": False, "error": str(e), "rejected": True,
+                    "suggested_quality": e.suggested_quality}
+
         except yt_dlp.utils.DownloadError as e:
+            if isinstance(getattr(e, "exc_info", (None, None))[1], DownloadRejected):
+                rejected = e.exc_info[1]
+                progress.suggested_quality = rejected.suggested_quality
+                return {"success": False, "error": str(rejected), "rejected": True,
+                        "suggested_quality": rejected.suggested_quality}
             error_msg = str(e)
             # Clean up common error messages
             if "Private video" in error_msg:
@@ -694,6 +789,9 @@ class DownloadService:
         job_id: Optional[str] = None,
         on_finish: Optional[Callable[["DownloadProgress", dict], Awaitable[Any]]] = None,
         on_enqueue: Optional[Callable[[], Awaitable[Any]]] = None,
+        on_start: Optional[Callable[["DownloadProgress"], Awaitable[Any]]] = None,
+        media_key: Optional[str] = None,
+        client: Optional[str] = None,
     ) -> tuple[str, asyncio.Task, Optional[str]]:
         """Start a download job asynchronously. Returns job_id, task and platform.
 
@@ -718,18 +816,26 @@ class DownloadService:
         progress = DownloadProgress(job_id, progress_callback)
         progress.status = JobStatus.QUEUED
         progress.current_stage = "Waiting for a download slot..."
+        progress.quality = quality
+        progress.media_key = media_key
+        progress.client = client
+        progress.task_ready = asyncio.get_running_loop().create_future()
         self.active_jobs[job_id] = progress
+        if media_key:
+            self._shared[(media_key, quality)] = job_id
 
         try:
             if on_enqueue:
                 await on_enqueue()
         except BaseException:
             self.active_jobs.pop(job_id, None)
+            self._release_key(progress)
+            progress.task_ready.set_result(None)
             raise
 
         # Register callback if provided
         if progress_callback:
-            self.progress_callbacks[job_id] = progress_callback
+            self.progress_callbacks.setdefault(job_id, []).append(progress_callback)
 
         # Create async task
         loop = asyncio.get_running_loop()
@@ -762,6 +868,11 @@ class DownloadService:
                 # Previews also use this pool. Its wait must not consume the
                 # download timeout or mark the job as already started.
                 await worker_started.wait()
+                if on_start and not progress.cancelled:
+                    try:
+                        await on_start(progress)
+                    except Exception:
+                        logger.exception("Failed to record the start of job %s", job_id)
                 try:
                     result = await asyncio.wait_for(
                         asyncio.shield(future),
@@ -802,6 +913,8 @@ class DownloadService:
                 else:
                     progress.status = JobStatus.FAILED
                     progress.error_message = result.get("error", "Unknown error")
+                    # Nothing to serve; don't leave partial streams behind
+                    shutil.rmtree(settings.temp_dir / job_id, ignore_errors=True)
                     self._remember_completed(progress)
                     progress._notify()
 
@@ -821,6 +934,7 @@ class DownloadService:
                 self._waiting_jobs.pop(job_id, None)
                 self._running_jobs.discard(job_id)
                 self.active_jobs.pop(job_id, None)
+                self._release_key(progress)
                 self.progress_callbacks.pop(job_id, None)
                 self._dispatch_queued()
                 if on_finish:
@@ -830,6 +944,7 @@ class DownloadService:
                         logger.exception("Failed to persist job %s", job_id)
 
         task = asyncio.create_task(download_task())
+        progress.task_ready.set_result(task)
         self._dispatch_queued()
         return job_id, task, platform
 
@@ -855,6 +970,7 @@ class DownloadService:
             progress.cancel_event.set()
             progress.status = JobStatus.CANCELLED
             progress.error_message = "Cancelled by user"
+            self._release_key(progress)
             ready = self._waiting_jobs.pop(job_id, None)
             if ready is not None:
                 # Queued jobs have no worker to stop. Wake their task to persist
@@ -900,6 +1016,7 @@ def extract_video_preview(url: str) -> dict:
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
+            sizes = estimate_quality_sizes(info, ydl) if info else {}
     except yt_dlp.utils.DownloadError as e:
         error_msg = str(e)
         if "Private video" in error_msg:
@@ -938,6 +1055,8 @@ def extract_video_preview(url: str) -> dict:
         "thumbnail_url": info.get("thumbnail"),
         "duration": duration,
         "available_qualities": sorted(available),
+        "sizes": sizes,
+        "size_limit": size_limit_bytes(),
     }
 
 

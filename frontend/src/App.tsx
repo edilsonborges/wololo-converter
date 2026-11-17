@@ -5,6 +5,7 @@ import { useQueueManager } from './hooks/useQueueManager';
 import { api } from './api';
 import type { VideoQuality, PreviewResponse } from './types';
 import { parseAutoDownloadRoute, parseAutoDownloadQuality, MUSIC_PLATFORM } from './urlParser';
+import { checkSize } from './size';
 import packageJson from '../package.json';
 
 function App() {
@@ -14,6 +15,10 @@ function App() {
   const [resetTrigger, setResetTrigger] = useState(0);
   const [showReleaseNotes, setShowReleaseNotes] = useState(false);
   const closeReleaseNotes = useCallback(() => setShowReleaseNotes(false), []);
+  // Feedback after adding: duplicates skipped, and the items they point to
+  const [notice, setNotice] = useState<string | null>(null);
+  const [highlightIds, setHighlightIds] = useState<string[]>([]);
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Preview state
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
@@ -34,6 +39,7 @@ function App() {
     reorderItems,
     cancelItem,
     retryItem,
+    switchQuality,
     clearCompleted,
     downloadFile,
     extractAudio,
@@ -131,8 +137,31 @@ function App() {
 
     const musicUrls = validUrls.filter((u) => u.platform === MUSIC_PLATFORM).map((u) => u.url);
     const otherUrls = parsedUrls.filter((u) => u.platform !== MUSIC_PLATFORM);
-    const added = addToQueue(otherUrls, selectedQuality) + addMusicLinks(musicUrls);
-    if (added > 0) {
+    const result = addToQueue(otherUrls, selectedQuality, { preview: validUrls.length === 1 ? preview : null });
+    const added = result.added + addMusicLinks(musicUrls);
+
+    // Repeats within the pasted text plus links already in the queue
+    const duplicates =
+      result.duplicates + otherUrls.reduce((sum, u) => sum + (u.isValid ? u.duplicates ?? 0 : 0), 0);
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    if (duplicates > 0) {
+      const total = added + duplicates;
+      setNotice(
+        added === 0 && duplicates === 1
+          ? 'Already in the queue'
+          : `${total} links → ${added} added, ${duplicates} ${duplicates === 1 ? 'duplicate' : 'duplicates'}`,
+      );
+      setHighlightIds(result.duplicateIds);
+      noticeTimerRef.current = setTimeout(() => {
+        setNotice(null);
+        setHighlightIds([]);
+      }, 4000);
+    } else {
+      setNotice(null);
+      setHighlightIds([]);
+    }
+
+    if (added > 0 || duplicates > 0) {
       // Clear the input and preview after adding to queue
       setParsedUrls([]);
       setPreview(null);
@@ -140,7 +169,11 @@ function App() {
       lastPreviewUrlRef.current = null;
       setResetTrigger((prev) => prev + 1);
     }
-  }, [parsedUrls, addToQueue, addMusicLinks, selectedQuality]);
+  }, [parsedUrls, addToQueue, addMusicLinks, selectedQuality, preview]);
+
+  useEffect(() => () => {
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+  }, []);
 
   const validUrlCount = parsedUrls.filter((u) => u.isValid).length;
   const canAddToQueue = validUrlCount > 0;
@@ -198,7 +231,16 @@ function App() {
                 selectedQuality={selectedQuality}
                 onQualityChange={setSelectedQuality}
                 availableQualities={isSingleUrl && preview ? preview.available_qualities : undefined}
+                sizes={isSingleUrl && preview ? preview.sizes : undefined}
+                sizeLimit={isSingleUrl && preview ? preview.size_limit : undefined}
               />
+            )}
+
+            {/* The chosen quality is over the server's limit */}
+            {isSingleUrl && hasVideoUrls && checkSize(preview, selectedQuality).tooLarge && (
+              <p role="alert" className="text-sm text-error-text">
+                {checkSize(preview, selectedQuality).message}
+              </p>
             )}
 
             {/* Add to queue button */}
@@ -214,6 +256,11 @@ function App() {
                 <>Add to Queue</>
               )}
             </button>
+            {notice && (
+              <p role="status" className="text-sm text-text-secondary text-center -mt-2">
+                {notice}
+              </p>
+            )}
           </div>
 
           {/* Queue Manager */}
@@ -226,6 +273,8 @@ function App() {
               onRemove={removeItem}
               onCancel={cancelItem}
               onRetry={retryItem}
+              onSwitchQuality={switchQuality}
+              highlightIds={highlightIds}
               onDownload={downloadFile}
               onExtractAudio={extractAudio}
               extractingAudio={extractingAudio}

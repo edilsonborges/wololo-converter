@@ -57,6 +57,7 @@ export const MultiURLInput: FC<MultiURLInputProps> = ({ onUrlsChange, disabled, 
 
   const validCount = parsedUrls.filter((u) => u.isValid).length;
   const invalidCount = parsedUrls.filter((u) => !u.isValid).length;
+  const duplicateCount = parsedUrls.reduce((sum, u) => sum + (u.isValid ? u.duplicates ?? 0 : 0), 0);
 
   return (
     <div className="space-y-3">
@@ -95,6 +96,13 @@ export const MultiURLInput: FC<MultiURLInputProps> = ({ onUrlsChange, disabled, 
             <div className="flex items-center gap-1 text-success-text">
               <Icon name="check" size="sm" />
               <span>{validCount} valid</span>
+            </div>
+          )}
+          {duplicateCount > 0 && (
+            <div className="flex items-center gap-1 text-text-muted" title="The same video (and link variations of it) counts once">
+              <span>
+                {duplicateCount} {duplicateCount === 1 ? 'duplicate' : 'duplicates'} ignored
+              </span>
             </div>
           )}
           {invalidCount > 0 && (

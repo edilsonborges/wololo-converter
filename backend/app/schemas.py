@@ -34,6 +34,11 @@ class PreviewResponse(BaseModel):
     thumbnail_url: Optional[str] = None
     duration: Optional[int] = None
     available_qualities: list[int] = Field(default_factory=list)
+    sizes: dict[str, int] = Field(
+        default_factory=dict,
+        description="Estimated size in bytes per quality (360p..1080p, mp3), when the platform reports it",
+    )
+    size_limit: Optional[int] = Field(default=None, description="Largest download allowed, in bytes")
 
 
 class DownloadRequest(BaseModel):
@@ -90,6 +95,7 @@ class JobResponse(BaseModel):
     duration: Optional[int] = None
     thumbnail_url: Optional[str] = None
     error_message: Optional[str] = None
+    estimated_size: Optional[int] = None
     created_at: datetime
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
@@ -115,6 +121,9 @@ class JobProgressUpdate(BaseModel):
     title: Optional[str] = None
     error_message: Optional[str] = None
     download_ready: bool = False
+    estimated_size: Optional[int] = None
+    # When a download is refused as too large: the best quality that fits
+    suggested_quality: Optional[str] = None
 
 
 class DownloadStartResponse(BaseModel):
@@ -140,6 +149,10 @@ class DownloadFailedResponse(BaseModel):
     job_id: str
     status: JobStatus
     detail: str
+    suggested_quality: Optional[str] = Field(
+        default=None,
+        description="When the video is too large: a quality that fits the limit (retry with it)",
+    )
 
 
 class ErrorResponse(BaseModel):
