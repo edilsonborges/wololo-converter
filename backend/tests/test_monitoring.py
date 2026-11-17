@@ -162,6 +162,7 @@ class TestBackfill:
         )
         assert date(2026, 10, 11) not in result
         assert result[date(2026, 10, 17)][:2] == ("operational", 100.0)
+        assert result[date(2026, 10, 17)][2].startswith("Estimated from tunnel log: no unanswered requests")
         assert "2 download requests answered" in result[date(2026, 10, 17)][2]
         assert result[date(2026, 10, 18)][0] == "outage"  # 94% < 95%
         assert result[date(2026, 10, 18)][1] == round(100 - (86 + 32 / 60) * 100 / 1440, 2)
@@ -181,3 +182,31 @@ class TestBackfill:
         assert day["estimated"] is True
         assert day["status"] == "operational"
         assert day["note"].startswith("Before monitoring")
+
+
+def test_cloudflare_evidence_counts_5xx_minutes():
+    from datetime import date
+    from app.backfill import CloudflareEvidence, TunnelEvidence, estimate_days
+
+    cloudflare = CloudflareEvidence({
+        "since": "2026-10-18T04:28:00+00:00",
+        "until": "2026-11-17T04:23:00+00:00",
+        "days": {"2026-10-18": {"ok": 110, "client_errors": 0, "server_errors": 0},
+                 "2026-10-19": {"ok": 20, "client_errors": 10, "server_errors": 30}},
+        "error_minutes": ["2026-10-19T08:00:00Z", "2026-10-19T08:01:00Z", "2026-10-19T08:02:00Z"],
+    })
+    tunnel = TunnelEvidence(["2026-10-16T12:09:54Z INF Starting tunnel", "2026-10-25T00:00:00Z INF x"])
+    result = estimate_days(
+        [date(2026, 10, 17), date(2026, 10, 18), date(2026, 10, 19), date(2026, 12, 1)],
+        tunnel, {date(2026, 10, 18): 4}, cloudflare,
+    )
+    assert result[date(2026, 10, 17)][2] == "Estimated from tunnel log: no unanswered requests"
+    assert result[date(2026, 10, 18)] == (
+        "operational", 100.0,
+        "Estimated from Cloudflare: ~110 requests answered, no server errors; "
+        "tunnel log: no unanswered requests; 4 download requests answered",
+    )
+    status, uptime, note = result[date(2026, 10, 19)]
+    assert uptime == round(100 - 3 * 100 / 1440, 2)
+    assert "5xx errors in 3 min" in note
+    assert date(2026, 12, 1) not in result
