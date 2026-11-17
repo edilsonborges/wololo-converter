@@ -6,7 +6,7 @@ session table is needed and changing the password signs everyone out.
 import hashlib
 import hmac
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -95,15 +95,18 @@ async def me():
 
 
 def _job_row(job: DownloadJob) -> dict:
-    elapsed = None
+    elapsed = queued = None
     if job.started_at and job.completed_at:
         elapsed = round((job.completed_at - job.started_at).total_seconds())
+    if job.created_at and job.started_at:
+        queued = max(0, round((job.started_at - job.created_at).total_seconds()))
     return {
         "id": job.id,
         "created_at": job.created_at.isoformat() + "Z" if job.created_at else None,
         "started_at": job.started_at.isoformat() + "Z" if job.started_at else None,
         "completed_at": job.completed_at.isoformat() + "Z" if job.completed_at else None,
         "elapsed_seconds": elapsed,
+        "queued_seconds": queued,
         "status": job.status,
         "platform": job.platform,
         "quality": job.quality,
@@ -120,15 +123,36 @@ def _job_row(job: DownloadJob) -> dict:
     }
 
 
-@router.get("/jobs", dependencies=[Depends(require_admin)])
-async def jobs(
-    limit: int = Query(50, ge=1, le=200),
-    offset: int = Query(0, ge=0),
-    status: Optional[str] = None,
-    platform: Optional[str] = None,
-    q: Optional[str] = Query(None, max_length=200, description="Search title, URL or IP"),
-    db: AsyncSession = Depends(get_session),
-):
+# Time ranges of the history view and the width of each histogram bar
+RANGES = {
+    "24h": (timedelta(hours=24), timedelta(hours=1)),
+    "7d": (timedelta(days=7), timedelta(hours=6)),
+    "30d": (timedelta(days=30), timedelta(days=1)),
+    "90d": (timedelta(days=90), timedelta(days=1)),
+    "all": (None, None),
+}
+RangeName = Query("all", pattern="^(24h|7d|30d|90d|all)$")
+
+
+def _parse_time(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"Invalid time: {value}")
+    if parsed.tzinfo:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
+def _job_filters(
+    status: Optional[str],
+    platform: Optional[str],
+    q: Optional[str],
+    since: Optional[datetime],
+    until: Optional[datetime],
+) -> list:
     filters = []
     if status:
         filters.append(DownloadJob.status == status)
@@ -141,13 +165,117 @@ async def jobs(
             DownloadJob.url.ilike(like),
             DownloadJob.client_ip.ilike(like),
             DownloadJob.client_name.ilike(like),
+            DownloadJob.user_agent.ilike(like),
         ))
+    if since:
+        filters.append(DownloadJob.created_at >= since)
+    if until:
+        filters.append(DownloadJob.created_at < until)
+    return filters
+
+
+def _range_window(range_name: str, since: Optional[str], until: Optional[str]):
+    """Explicit since/until (a clicked bar) win over the named range."""
+    span, _ = RANGES[range_name]
+    start = _parse_time(since) or (utcnow() - span if span else None)
+    return start, _parse_time(until)
+
+
+@router.get("/jobs", dependencies=[Depends(require_admin)])
+async def jobs(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    status: Optional[str] = None,
+    platform: Optional[str] = None,
+    q: Optional[str] = Query(None, max_length=200, description="Search title, URL, IP, key or user agent"),
+    range: str = RangeName,
+    since: Optional[str] = None,
+    until: Optional[str] = None,
+    db: AsyncSession = Depends(get_session),
+):
+    start, end = _range_window(range, since, until)
+    filters = _job_filters(status, platform, q, start, end)
     total = (await db.execute(select(func.count()).select_from(DownloadJob).where(*filters))).scalar()
     rows = (await db.execute(
         select(DownloadJob).where(*filters)
         .order_by(desc(DownloadJob.created_at)).limit(limit).offset(offset)
     )).scalars().all()
     return {"total": total, "items": [_job_row(job) for job in rows]}
+
+
+def _bucket_start(at: datetime, width: timedelta) -> datetime:
+    if width >= timedelta(days=1):
+        return at.replace(hour=0, minute=0, second=0, microsecond=0)
+    hours = int(width.total_seconds() // 3600)
+    return at.replace(hour=at.hour - at.hour % hours, minute=0, second=0, microsecond=0)
+
+
+@router.get("/insights", dependencies=[Depends(require_admin)])
+async def insights(
+    status: Optional[str] = None,
+    platform: Optional[str] = None,
+    q: Optional[str] = Query(None, max_length=200),
+    range: str = RangeName,
+    tz_offset: int = Query(0, ge=-840, le=840, description="Viewer's UTC offset as JS getTimezoneOffset()"),
+    db: AsyncSession = Depends(get_session),
+):
+    """Histogram of downloads over time (by status) and the platform split,
+    for the same filters as the history list. Bars follow the viewer's clock
+    (a day bar is the viewer's day), so their labels match what they list."""
+    span, width = RANGES[range]
+    shift = timedelta(minutes=tz_offset)  # UTC - local
+    now = utcnow()
+    start = now - span if span else None
+    filters = _job_filters(status, platform, q, start, None)
+    rows = (await db.execute(
+        select(DownloadJob.created_at, DownloadJob.status, DownloadJob.platform, DownloadJob.current_stage)
+        .where(*filters)
+    )).all()
+
+    if start is None:
+        # Whole history: one bar per day from the first download
+        first = min((r[0] for r in rows if r[0]), default=now)
+        width = timedelta(days=1)
+        start = first
+    # Buckets are computed on the viewer's local clock
+    first_bucket = _bucket_start(start - shift, width)
+    local_now = now - shift
+    buckets: dict[datetime, dict] = {}
+    cursor = first_bucket
+    while cursor <= local_now:
+        buckets[cursor] = {"completed": 0, "failed": 0, "cancelled": 0, "other": 0}
+        cursor += width
+
+    platforms: dict[str, int] = {}
+    for created_at, job_status, job_platform, stage in rows:
+        if created_at is None:
+            continue
+        key = _bucket_start(created_at - shift, width)
+        bucket = buckets.get(key)
+        if bucket is not None:
+            if stage == "Interrupted":
+                # Cut short by a server restart: not the platform's failure
+                series = "cancelled"
+            elif job_status in ("completed", "failed", "cancelled"):
+                series = job_status
+            else:
+                series = "other"
+            bucket[series] += 1
+        platforms[job_platform] = platforms.get(job_platform, 0) + 1
+
+    return {
+        "range": range,
+        "bucket_seconds": int(width.total_seconds()),
+        "total": len(rows),
+        "buckets": [
+            {"start": (at + shift).isoformat() + "Z", "end": (at + width + shift).isoformat() + "Z", **counts}
+            for at, counts in buckets.items()
+        ],
+        "platforms": [
+            {"platform": name, "count": count}
+            for name, count in sorted(platforms.items(), key=lambda item: -item[1])
+        ],
+    }
 
 
 async def _period_summary(db: AsyncSession, since) -> dict:

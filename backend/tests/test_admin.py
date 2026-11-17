@@ -164,3 +164,76 @@ class TestAccessHelpers:
         assert client_ip(request({"CF-Connecting-IP": "1.2.3.4", "X-Real-IP": "9.9.9.9"})) == "1.2.3.4"
         assert client_ip(request({"X-Forwarded-For": "5.6.7.8, 10.0.0.1"})) == "5.6.7.8"
         assert client_ip(request({})) == "172.18.0.3"
+
+
+class TestInsights:
+    async def test_histogram_platforms_and_time_filters(self, client, db_session, admin_enabled):
+        now = utcnow()
+        db_session.add_all([
+            DownloadJob(id="h1", url="u", platform="youtube", output_format="video", status="completed",
+                        created_at=now - timedelta(minutes=5),
+                        started_at=now - timedelta(minutes=4), completed_at=now - timedelta(minutes=3)),
+            DownloadJob(id="h2", url="u", platform="youtube", output_format="video", status="failed",
+                        created_at=now - timedelta(hours=3)),
+            DownloadJob(id="h3", url="u", platform="tiktok", output_format="video", status="completed",
+                        created_at=now - timedelta(hours=5)),
+            DownloadJob(id="old", url="u", platform="instagram", output_format="video", status="completed",
+                        created_at=now - timedelta(days=3)),
+            DownloadJob(id="cut", url="u", platform="twitter", output_format="video", status="failed",
+                        current_stage="Interrupted", created_at=now - timedelta(days=2)),
+        ])
+        await db_session.commit()
+        await login(client)
+
+        data = (await client.get("/api/admin/insights?range=24h")).json()
+        assert data["bucket_seconds"] == 3600
+        assert data["total"] == 3
+        assert 24 <= len(data["buckets"]) <= 25
+        assert sum(b["completed"] for b in data["buckets"]) == 2
+        assert sum(b["failed"] for b in data["buckets"]) == 1
+        assert data["platforms"] == [{"platform": "youtube", "count": 2}, {"platform": "tiktok", "count": 1}]
+
+        week = (await client.get("/api/admin/insights?range=7d&platform=instagram")).json()
+        assert week["bucket_seconds"] == 6 * 3600
+        assert week["total"] == 1
+
+        everything = (await client.get("/api/admin/insights?range=all")).json()
+        assert everything["total"] == 5
+        # Restart-interrupted jobs are drawn with the cancelled ones, not as failures
+        assert sum(b["failed"] for b in everything["buckets"]) == 1
+        assert sum(b["cancelled"] for b in everything["buckets"]) == 1
+        assert everything["bucket_seconds"] == 86400
+
+        # A clicked bar narrows the list to its slot
+        bucket = [b for b in data["buckets"] if b["completed"]][-1]
+        listed = (await client.get(
+            "/api/admin/jobs", params={"range": "24h", "since": bucket["start"], "until": bucket["end"]},
+        )).json()
+        assert [j["id"] for j in listed["items"]] == ["h1"]
+        assert listed["items"][0]["queued_seconds"] == 60
+        assert listed["items"][0]["elapsed_seconds"] == 60
+
+        assert (await client.get("/api/admin/jobs?range=24h")).json()["total"] == 3
+        assert (await client.get("/api/admin/insights?range=1y")).status_code == 422
+        assert (await client.get("/api/admin/jobs?since=yesterday")).status_code == 422
+
+
+async def test_day_bars_follow_the_viewer_timezone(client, db_session, admin_enabled):
+    """A job at 01:00 UTC is on the previous day for a viewer at UTC-3."""
+    from datetime import datetime as dt
+
+    today = utcnow().replace(hour=1, minute=0, second=0, microsecond=0)
+    if today > utcnow():
+        today -= timedelta(days=1)
+    db_session.add(DownloadJob(id="tz", url="u", platform="youtube", output_format="video",
+                               status="completed", created_at=today))
+    await db_session.commit()
+    await login(client)
+
+    data = (await client.get("/api/admin/insights?range=30d&tz_offset=180")).json()
+    bucket = next(b for b in data["buckets"] if b["completed"])
+    start = dt.fromisoformat(bucket["start"].rstrip("Z"))
+    # The bar starts at local midnight (03:00 UTC) of the previous day
+    assert start == (today - timedelta(days=1)).replace(hour=3)
+    listed = (await client.get("/api/admin/jobs", params={"since": bucket["start"], "until": bucket["end"]})).json()
+    assert [j["id"] for j in listed["items"]] == ["tz"]

@@ -2,11 +2,12 @@
 import asyncio
 import json
 import logging
+import re
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Dict
-from urllib.parse import urlencode
+from urllib.parse import unquote, urlencode
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -391,7 +392,17 @@ async def download_from_link(
     is returned as an attachment; otherwise the job keeps running in the
     background and the response is `202` with the URLs to follow it.
     """
-    source_url = link_source_url(request, url)
+    return await serve_link(request, link_source_url(request, url), quality, db)
+
+
+async def serve_link(
+    request: Request,
+    source_url: str,
+    quality: VideoQuality,
+    db: AsyncSession,
+) -> Response:
+    """Shared by GET /api/download and the short /<link> form: queue the
+    download, wait a little, and answer with the file or a 202."""
     try:
         source_url = DownloadRequest(url=source_url, quality=quality).url
     except ValidationError as e:
@@ -449,6 +460,65 @@ async def download_from_link(
         content=body.model_dump(mode="json"),
         headers={"Location": body.status_url, "Retry-After": str(retry_after)},
     )
+
+
+SHORT_LINK_QUALITIES = {q.value: q for q in VideoQuality}
+
+
+def short_link_target(raw_path: str, query_string: str) -> tuple[str, VideoQuality]:
+    """Read ``[/<quality>]/<video link>`` from the raw request path.
+
+    The link is taken as typed, without percent-encoding: its own query
+    string (``?v=...&t=...``) is the request's query string. Proxies that
+    merge slashes turn ``https://`` into ``https:/``, so that is undone.
+    """
+    target = raw_path.lstrip("/")
+    quality = VideoQuality.Q_720P
+    first, _, rest = target.partition("/")
+    if first.lower() in SHORT_LINK_QUALITIES and rest:
+        quality = SHORT_LINK_QUALITIES[first.lower()]
+        target = rest.lstrip("/")
+    if re.match(r"^https?%3a", target, re.IGNORECASE):
+        target = unquote(target)
+    target = re.sub(r"^(https?):/+", r"\1://", target, flags=re.IGNORECASE)
+    if not re.match(r"^https?://", target, re.IGNORECASE):
+        target = "https://" + target
+    if query_string:
+        target += "?" + query_string
+    return target, quality
+
+
+@router.get(
+    "/d/{target:path}",
+    summary="Download from a short link: /<video link> or /<quality>/<video link>",
+    response_class=FileResponse,
+    responses={
+        200: {"description": "The finished file, as an attachment.",
+              "content": {"video/mp4": {"schema": {"type": "string", "format": "binary"}},
+                          "audio/mpeg": {"schema": {"type": "string", "format": "binary"}}}},
+        202: {"model": DownloadAcceptedResponse, "description": "Still downloading; follow `status_url`."},
+        400: {"model": ErrorResponse, "description": "Invalid or unsupported URL"},
+        422: {"model": DownloadFailedResponse, "description": "The download failed"},
+        429: {"model": ErrorResponse, "description": "Rate limit reached or download queue full"},
+    },
+)
+@limiter.limit(settings.rate_limit_downloads)
+async def download_from_short_link(
+    request: Request,
+    target: str,
+    db: AsyncSession = Depends(get_session),
+):
+    """Same as `GET /api/download`, with the video link pasted as-is.
+
+    On the website the short form is `https://wololo.edilson.dev/<video link>`
+    (e.g. `/https://www.youtube.com/watch?v=379BagNcNf4`); prefix a quality
+    (`/mp3/<link>`, `/1080p/<link>`) to change the default 720p.
+    """
+    raw_path = request.scope.get("raw_path", b"").decode("latin-1")
+    marker = "/d/"
+    raw_target = raw_path[raw_path.index(marker) + len(marker):] if marker in raw_path else target
+    source_url, quality = short_link_target(raw_target, request.scope.get("query_string", b"").decode("latin-1"))
+    return await serve_link(request, source_url, quality, db)
 
 
 @router.get("/status", summary="Service and platform status for the last 90 days")

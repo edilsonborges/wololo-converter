@@ -4,7 +4,7 @@ import { getReleases } from './changelog';
 import { useQueueManager } from './hooks/useQueueManager';
 import { api } from './api';
 import type { VideoQuality, PreviewResponse } from './types';
-import { parseAutoDownloadRoute, MUSIC_PLATFORM } from './urlParser';
+import { parseAutoDownloadRoute, parseAutoDownloadQuality, MUSIC_PLATFORM } from './urlParser';
 import packageJson from '../package.json';
 
 function App() {
@@ -52,7 +52,7 @@ function App() {
     if (parsed.platform === MUSIC_PLATFORM) {
       addMusicLinks([parsed.url], { autoDownload: true });
     } else {
-      addToQueue([parsed], '480p', { autoDownload: true });
+      addToQueue([parsed], parseAutoDownloadQuality(window.location.pathname), { autoDownload: true });
     }
     window.history.replaceState({}, '', '/');
   }, [addToQueue, addMusicLinks]);
@@ -257,12 +257,8 @@ function App() {
       <footer className="py-6 px-4 text-center text-text-muted text-sm border-t border-border-light">
         <p>Personal use only. Respect copyright and platform terms of service.</p>
         <p className="mt-1 text-text-muted/60 text-xs">
-          <a
-            href="/status"
-            className="underline-offset-2 hover:text-accent hover:underline transition-colors"
-            title="Service status"
-          >
-            _status
+          <a href="/status" className="hover:text-accent transition-colors" title="Service status">
+            status
           </a>
           {' • '}
           <button

@@ -14,6 +14,18 @@ OpenAPI contract: https://wololo.edilson.dev/api/openapi.json
 - Threads: post and share links
 - Facebook: video pages, watch, fb.watch
 
+## Shortest form: paste the link after the domain
+
+No encoding needed. The video link goes right after the domain, exactly as copied:
+
+    GET https://wololo.edilson.dev/d/https://www.youtube.com/watch?v=379BagNcNf4
+
+- `/d/<link>` always returns the file (or `202`), for any client.
+- `https://wololo.edilson.dev/<link>` (without `/d`) also returns the file to scripts and agents; browsers that ask for HTML get the website, which starts the download on screen.
+- Put a quality before the link to change the 720p default: `/d/mp3/<link>`, `/d/1080p/<link>`.
+
+Responses are the same as below.
+
 ## Download with one link
 
 Percent-encode the full video URL and pass it as `url`:

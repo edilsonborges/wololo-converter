@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseAutoDownloadRoute, parseURLs } from '../urlParser';
+import { parseAutoDownloadQuality, parseAutoDownloadRoute, parseURLs } from '../urlParser';
 
 function route(pathname: string, search = '', hash = '') {
   return { pathname, search, hash };
@@ -133,5 +133,18 @@ describe('music page links', () => {
   it('rejects other pages of the same site', async () => {
     const { parseURLs } = await import('../urlParser');
     expect(parseURLs('https://artlist.io/royalty-free-music/artist/djnoone/2901')[0].isValid).toBe(false);
+  });
+});
+
+describe('short link quality prefix', () => {
+  it('reads the link after a quality prefix', () => {
+    expect(parseAutoDownloadRoute(route('/mp3/https://www.youtube.com/watch', '?v=379BagNcNf4')))
+      .toMatchObject({ platform: 'youtube', isValid: true });
+    expect(parseAutoDownloadQuality('/mp3/https://www.youtube.com/watch')).toBe('mp3');
+    expect(parseAutoDownloadQuality('/1080P/https://youtu.be/x')).toBe('1080p');
+  });
+
+  it('defaults to 720p like the API', () => {
+    expect(parseAutoDownloadQuality('/https://www.youtube.com/watch')).toBe('720p');
   });
 });

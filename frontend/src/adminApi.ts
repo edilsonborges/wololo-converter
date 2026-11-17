@@ -33,6 +33,7 @@ export interface AdminJob {
   started_at: string | null;
   completed_at: string | null;
   elapsed_seconds: number | null;
+  queued_seconds: number | null;
   status: string;
   platform: string;
   quality: string | null;
@@ -99,6 +100,34 @@ export interface AdminSystem {
   samples: SystemSample[];
 }
 
+export type HistoryRange = '24h' | '7d' | '30d' | '90d' | 'all';
+
+export interface HistoryBucket {
+  start: string;
+  end: string;
+  completed: number;
+  failed: number;
+  cancelled: number;
+  other: number;
+}
+
+export interface AdminInsights {
+  range: HistoryRange;
+  bucket_seconds: number;
+  total: number;
+  buckets: HistoryBucket[];
+  platforms: { platform: string; count: number }[];
+}
+
+export interface HistoryFilters {
+  status?: string;
+  platform?: string;
+  q?: string;
+  range?: HistoryRange;
+  since?: string;
+  until?: string;
+}
+
 export class UnauthorizedError extends Error {}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -118,6 +147,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function toQuery(params: object): string {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') query.set(key, String(value));
+  });
+  return query.toString();
+}
+
 export const statusApi = {
   get: () => request<StatusResponse>('/api/status'),
 };
@@ -129,13 +166,12 @@ export const adminApi = {
   me: () => request<{ ok: boolean }>('/api/admin/me'),
   summary: () => request<AdminSummary>('/api/admin/summary'),
   system: (hours = 24) => request<AdminSystem>(`/api/admin/system?hours=${hours}`),
-  jobs: (params: { limit?: number; offset?: number; status?: string; platform?: string; q?: string }) => {
-    const query = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== '') query.set(key, String(value));
-    });
-    return request<{ total: number; items: AdminJob[] }>(`/api/admin/jobs?${query}`);
-  },
+  jobs: (params: HistoryFilters & { limit?: number; offset?: number }) =>
+    request<{ total: number; items: AdminJob[] }>(`/api/admin/jobs?${toQuery(params)}`),
+  insights: (params: HistoryFilters) =>
+    request<AdminInsights>(
+      `/api/admin/insights?${toQuery({ ...params, since: undefined, until: undefined, tz_offset: new Date().getTimezoneOffset() })}`,
+    ),
 };
 
 export function formatBytes(bytes: number | null | undefined): string {

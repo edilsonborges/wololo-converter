@@ -46,7 +46,7 @@ test.describe('Status page', () => {
 
   test('home footer links to the status page', async ({ page }) => {
     await page.goto('/')
-    await expect(page.locator('footer a', { hasText: '_status' })).toHaveAttribute('href', '/status')
+    await expect(page.locator('footer a', { hasText: /^status$/ })).toHaveAttribute('href', '/status')
   })
 })
 
@@ -89,7 +89,23 @@ test.describe('Admin', () => {
           })
         : route.fulfill({ status: 401, json: {} }),
     )
-    await page.route('**/api/admin/jobs**', (route) =>
+    await page.route('**/api/admin/insights**', (route) => {
+      if (!signedIn) return route.fulfill({ status: 401, json: {} })
+      const hour = 3600 * 1000
+      const start = Date.now() - 24 * hour
+      return route.fulfill({
+        json: {
+          range: '7d', bucket_seconds: 3600, total: 3,
+          buckets: Array.from({ length: 24 }, (_, i) => ({
+            start: new Date(start + i * hour).toISOString(),
+            end: new Date(start + (i + 1) * hour).toISOString(),
+            completed: i === 23 ? 2 : 0, failed: i === 23 ? 1 : 0, cancelled: 0, other: 0,
+          })),
+          platforms: [{ platform: 'youtube', count: 2 }, { platform: 'tiktok', count: 1 }],
+        },
+      })
+    })
+        await page.route('**/api/admin/jobs**', (route) =>
       signedIn
         ? route.fulfill({
             json: {
@@ -115,9 +131,17 @@ test.describe('Admin', () => {
     await page.getByLabel('Password').fill('right')
     await page.getByRole('button', { name: 'Sign in' }).click()
     await page.waitForURL('**/admin')
-    await expect(page.getByRole('heading', { name: 'Download history' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Downloads', exact: true })).toBeVisible()
     await expect(page.getByRole('link', { name: 'A video' })).toBeVisible()
-    await expect(page.getByRole('table').last().getByRole('cell', { name: '203.0.113.5' })).toBeVisible()
+    await expect(page.getByRole('table').first().getByRole('cell', { name: '203.0.113.5' })).toBeVisible()
     await expect(page.getByText('CPU, last 24 h')).toBeVisible()
+    await expect(page.getByRole('img', { name: 'Downloads by platform' })).toBeVisible()
+    await expect(page.getByRole('list', { name: 'Platforms' })).toContainText('YouTube')
+    await expect(page.getByRole('navigation', { name: 'Pages' })).toContainText('1–1 of 1')
+
+    // Clicking a platform filters the list
+    const jobsRequest = page.waitForRequest((r) => r.url().includes('/api/admin/jobs') && r.url().includes('platform=tiktok'))
+    await page.getByRole('list', { name: 'Platforms' }).getByRole('button', { name: /TikTok/ }).click()
+    await jobsRequest
   })
 })

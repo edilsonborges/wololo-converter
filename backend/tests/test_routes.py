@@ -417,3 +417,48 @@ class TestOpenAPI:
         assert {"200", "202", "400", "422", "429"} <= set(get_download["responses"])
         assert "video/mp4" in get_download["responses"]["200"]["content"]
         assert "post" in spec["paths"]["/api/download"]
+
+
+class TestShortLink:
+    @pytest.mark.parametrize("raw,query,expected_url,expected_quality", [
+        ("https://www.youtube.com/watch", "v=379BagNcNf4", "https://www.youtube.com/watch?v=379BagNcNf4", "720p"),
+        ("https:/www.youtube.com/watch", "v=379BagNcNf4&t=10", "https://www.youtube.com/watch?v=379BagNcNf4&t=10", "720p"),
+        ("mp3/https://youtu.be/379BagNcNf4", "", "https://youtu.be/379BagNcNf4", "mp3"),
+        ("1080P/https://youtu.be/379BagNcNf4", "", "https://youtu.be/379BagNcNf4", "1080p"),
+        ("https%3A%2F%2Fyoutu.be%2F379BagNcNf4", "", "https://youtu.be/379BagNcNf4", "720p"),
+        ("x.com/user/status/123", "s=48", "https://x.com/user/status/123?s=48", "720p"),
+    ])
+    def test_short_link_target(self, raw, query, expected_url, expected_quality):
+        from app.routes import short_link_target
+
+        url, quality = short_link_target(raw, query)
+        assert url == expected_url
+        assert quality.value == expected_quality
+
+    async def test_short_link_downloads_the_file(self, client, monkeypatch, tmp_path):
+        from app import routes
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "temp_dir", tmp_path)
+        calls = []
+
+        def run(url, job_id, quality, progress):
+            calls.append((url, quality.value))
+            (tmp_path / job_id).mkdir(parents=True, exist_ok=True)
+            (tmp_path / job_id / "Clip.mp3").write_bytes(b"mp3")
+            return {"success": True, "filename": "Clip.mp3"}
+
+        async def no_persist(progress, result):
+            return None
+
+        monkeypatch.setattr(download_service, "_run_download", run)
+        monkeypatch.setattr(routes, "persist_job_result", no_persist)
+        routes.limiter.reset()
+        response = await client.get("/api/d/mp3/https://www.youtube.com/watch?feature=share&v=379BagNcNf4")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "audio/mpeg"
+        assert calls == [("https://youtu.be/379BagNcNf4", "mp3")]
+
+    async def test_short_link_rejects_unsupported_site(self, client):
+        response = await client.get("/api/d/https://evil.com/video")
+        assert response.status_code == 400

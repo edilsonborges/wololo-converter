@@ -236,7 +236,7 @@ export default function StatusPage() {
       </main>
 
       <footer className="py-6 px-4 text-center text-xs text-text-muted border-t border-border-light">
-        <a href="/" className="hover:text-accent hover:underline underline-offset-2">
+        <a href="/" className="hover:text-accent">
           Wololo Converter • v{packageJson.version}
         </a>
       </footer>
