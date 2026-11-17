@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
-from sqlalchemy import Boolean, Column, String, DateTime, Integer, Float, Text
+from sqlalchemy import Boolean, Column, String, DateTime, Integer, Float, Text, UniqueConstraint
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -119,3 +119,17 @@ class SystemSample(Base):
     disk_percent = Column(Float, nullable=False)
     active_downloads = Column(Integer, nullable=False, default=0)
     queued_downloads = Column(Integer, nullable=False, default=0)
+
+
+class StatusBackfill(Base):
+    """Daily availability for days before the monitor existed, estimated from
+    other evidence (tunnel logs, download history). See app/backfill.py."""
+    __tablename__ = "status_backfill"
+    __table_args__ = (UniqueConstraint("day", "component"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    day = Column(String(10), nullable=False, index=True)  # YYYY-MM-DD (UTC)
+    component = Column(String(30), nullable=False)
+    status = Column(String(20), nullable=False)
+    uptime = Column(Float, nullable=True)  # None when only "it was up at some point" is known
+    note = Column(String(300), nullable=False)

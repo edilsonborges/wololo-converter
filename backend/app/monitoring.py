@@ -18,7 +18,7 @@ from sqlalchemy import Integer, cast, delete, func, select, text
 
 from .config import settings
 from .database import get_db_context
-from .models import DownloadJob, JobStatus, StatusCheck, SystemSample, utcnow
+from .models import DownloadJob, JobStatus, StatusBackfill, StatusCheck, SystemSample, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -191,6 +191,13 @@ async def probe_component_days(db, days: list[date], now: datetime) -> dict:
     for component, day, total, ok, first in rows:
         by_day[component][str(day)] = (int(total), int(ok or 0), first)
 
+    # Estimates for the days before the monitor existed (app/backfill.py)
+    backfill: dict = defaultdict(dict)
+    for row in (await db.execute(
+        select(StatusBackfill).where(StatusBackfill.day >= days[0].isoformat())
+    )).scalars():
+        backfill[row.component][row.day] = row
+
     interval = settings.status_check_interval_seconds
     result = {}
     for component in PROBED_COMPONENTS:
@@ -201,7 +208,17 @@ async def probe_component_days(db, days: list[date], now: datetime) -> dict:
             window_start = max(day_start, first_check) if first_check else None
             window_end = min(day_start + timedelta(days=1), now)
             if window_start is None or window_end <= window_start:
-                series.append({"date": day.isoformat(), "status": NO_DATA, "uptime": None})
+                estimate = backfill[component].get(day.isoformat())
+                if estimate:
+                    series.append({
+                        "date": day.isoformat(),
+                        "status": estimate.status,
+                        "uptime": estimate.uptime,
+                        "note": estimate.note,
+                        "estimated": True,
+                    })
+                else:
+                    series.append({"date": day.isoformat(), "status": NO_DATA, "uptime": None})
                 continue
             expected = max(1, int((window_end - window_start).total_seconds() // interval))
             uptime = round(min(100.0, ok * 100 / max(expected, total)), 2)

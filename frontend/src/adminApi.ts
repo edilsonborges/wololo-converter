@@ -8,6 +8,8 @@ export interface StatusDay {
   uptime: number | null;
   completed?: number;
   failed?: number;
+  note?: string;
+  estimated?: boolean;
 }
 
 export interface StatusComponent {
