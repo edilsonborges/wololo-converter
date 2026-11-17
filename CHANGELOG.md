@@ -3,6 +3,14 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.14.1] - 2026-11-17
+
+### Changed
+
+- The estimated status history also uses Cloudflare's request analytics for
+  the last 30 days: requests answered per day, and any server error counts
+  as downtime.
+
 ## [0.14.0] - 2026-11-17
 
 ### Added

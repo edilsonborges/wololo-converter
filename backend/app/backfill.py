@@ -2,6 +2,9 @@
 
 Evidence, from strongest to weakest:
 
+0. Cloudflare analytics (last ~30 days, sampled counts) from
+   scripts/cloudflare-status-evidence.py: requests answered per day and the
+   minutes with 5xx errors, which count as downtime.
 1. Cloudflare tunnel log (cloudflared). The tunnel logs every request it
    could not deliver ("Unable to reach the origin service") and its own
    restarts. A day it covers with no failed request to Wololo means the site
@@ -13,16 +16,17 @@ Evidence, from strongest to weakest:
    about the rest of the day: those days are marked operational without an
    uptime figure.
 
-Usage (inside the backend container, the log piped from the host):
+Usage: scripts/backfill-status.sh (gathers the evidence on the host and runs
+this inside the backend container), or directly:
 
-    docker exec -i wololo-backend python -m app.backfill --tunnel-log - \\
-        < ~/Library/Logs/edilson-cloudflared-tunnel.log
+    python -m app.backfill --tunnel-log cloudflared.log --cloudflare cf.json
 
 Rows are replaced on every run, and days the monitor already covers are
 never touched.
 """
 import argparse
 import asyncio
+import json
 import re
 import sys
 from collections import defaultdict
@@ -104,24 +108,61 @@ def _requests(count: int) -> str:
     return f"{count} download request{'s' if count != 1 else ''} answered"
 
 
+class CloudflareEvidence:
+    """Per-day request counts and 5xx minutes from Cloudflare analytics."""
+
+    def __init__(self, data: dict):
+        self.days: dict[date, dict] = {date.fromisoformat(k): v for k, v in data.get("days", {}).items()}
+        self.error_minutes = [
+            datetime.fromisoformat(m.replace("Z", "+00:00")).replace(tzinfo=None)
+            for m in data.get("error_minutes", [])
+        ]
+        since = data.get("since")
+        self.since = datetime.fromisoformat(since).replace(tzinfo=None).date() if since else None
+        until = data.get("until")
+        self.until = datetime.fromisoformat(until).replace(tzinfo=None).date() if until else None
+
+    def covers(self, day: date) -> bool:
+        return bool(self.since and self.until and self.since <= day <= self.until)
+
+    def down_minutes(self, day: date) -> set[datetime]:
+        return {m for m in self.error_minutes if m.date() == day}
+
+
 def estimate_days(
     days: list[date],
     tunnel: Optional[TunnelEvidence],
     requests_per_day: dict[date, int],
+    cloudflare: Optional[CloudflareEvidence] = None,
 ) -> dict[date, tuple[str, Optional[float], str]]:
     """(status, uptime, note) per day that has some evidence."""
     result = {}
     for day in days:
         downloads = requests_per_day.get(day, 0)
-        if tunnel and tunnel.covers(day):
-            minutes, reasons = tunnel.downtime(day)
-            uptime = round(100 - minutes * 100 / 1440, 2)
-            note = "Estimated from the Cloudflare tunnel log: " + (
-                "; ".join(reasons) if reasons else "no unanswered requests"
-            )
+        tunnel_covers = bool(tunnel and tunnel.covers(day))
+        cloudflare_covers = bool(cloudflare and cloudflare.covers(day))
+        if tunnel_covers or cloudflare_covers:
+            minutes = 0.0
+            notes = []
+            if cloudflare_covers:
+                counts = cloudflare.days.get(day, {})
+                errors = cloudflare.down_minutes(day)
+                minutes += len(errors)
+                answered = counts.get("ok", 0)
+                notes.append(
+                    "Cloudflare: "
+                    # Counts are sampled: a quiet day can show none
+                    + (f"~{answered} requests answered" if answered else "no sampled requests")
+                    + (f", 5xx errors in {len(errors)} min" if errors else ", no server errors")
+                )
+            if tunnel_covers:
+                tunnel_minutes, reasons = tunnel.downtime(day)
+                minutes += tunnel_minutes
+                notes.append("tunnel log: " + ("; ".join(reasons) if reasons else "no unanswered requests"))
             if downloads:
-                note += f"; {_requests(downloads)}"
-            result[day] = (uptime_status(uptime), uptime, note)
+                notes.append(_requests(downloads))
+            uptime = round(100 - min(minutes, 1440.0) * 100 / 1440, 2)
+            result[day] = (uptime_status(uptime), uptime, "Estimated from " + "; ".join(notes))
         elif downloads:
             result[day] = (
                 "operational",
@@ -131,7 +172,11 @@ def estimate_days(
     return result
 
 
-async def run(tunnel_lines: Optional[Iterable[str]], dry_run: bool = False) -> list[tuple]:
+async def run(
+    tunnel_lines: Optional[Iterable[str]],
+    dry_run: bool = False,
+    cloudflare: Optional[CloudflareEvidence] = None,
+) -> list[tuple]:
     await init_db()
     tunnel = TunnelEvidence(tunnel_lines) if tunnel_lines is not None else None
     async with get_db_context() as db:
@@ -148,7 +193,7 @@ async def run(tunnel_lines: Optional[Iterable[str]], dry_run: bool = False) -> l
             return []
         first_day = min(starts)
         days = [first_day + timedelta(days=n) for n in range((last_day - first_day).days + 1)]
-        estimates = estimate_days(days, tunnel, requests)
+        estimates = estimate_days(days, tunnel, requests, cloudflare)
 
         output = []
         for day, (status, uptime, note) in sorted(estimates.items()):
@@ -166,6 +211,7 @@ async def run(tunnel_lines: Optional[Iterable[str]], dry_run: bool = False) -> l
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--tunnel-log", help="cloudflared log file, or - for stdin")
+    parser.add_argument("--cloudflare", help="JSON from scripts/cloudflare-status-evidence.py")
     parser.add_argument("--dry-run", action="store_true", help="print the estimate without saving it")
     args = parser.parse_args()
 
@@ -176,7 +222,12 @@ def main() -> None:
         with open(args.tunnel_log, errors="ignore") as handle:
             lines = handle.read().splitlines()
 
-    output = asyncio.run(run(lines, dry_run=args.dry_run))
+    cloudflare = None
+    if args.cloudflare:
+        with open(args.cloudflare) as handle:
+            cloudflare = CloudflareEvidence(json.load(handle))
+
+    output = asyncio.run(run(lines, dry_run=args.dry_run, cloudflare=cloudflare))
     for day, component, status, uptime, note in output:
         if component == "api":
             continue  # same evidence for both components; print once
