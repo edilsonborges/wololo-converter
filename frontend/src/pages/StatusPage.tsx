@@ -31,6 +31,9 @@ function dayDetail(component: StatusComponent, day: StatusDay): string {
     const total = (day.completed ?? 0) + (day.failed ?? 0);
     return `${day.completed} of ${total} downloads succeeded`;
   }
+  if (day.estimated) {
+    return day.uptime !== null ? `~${day.uptime.toFixed(2)}% uptime (estimated)` : 'Up (estimated)';
+  }
   return `${day.uptime?.toFixed(2)}% uptime`;
 }
 
@@ -63,7 +66,7 @@ function UptimeBars({ component, visibleDays }: { component: StatusComponent; vi
             >
               <span
                 className={`block w-full h-full rounded-[2px] ${meta.bar} ${
-                  active === index ? 'opacity-70' : 'group-hover:opacity-70'
+                  active === index ? 'opacity-70' : day.estimated ? 'opacity-50 group-hover:opacity-40' : 'group-hover:opacity-70'
                 }`}
               />
             </button>
@@ -72,8 +75,8 @@ function UptimeBars({ component, visibleDays }: { component: StatusComponent; vi
       </div>
       {hovered && active !== null && (
         <div
-          className="absolute z-10 top-11 w-56 -translate-x-1/2 rounded-lg border border-border bg-white px-3 py-2 shadow-lg text-sm pointer-events-none"
-          style={{ left: `clamp(7rem, ${((active + 0.5) / days.length) * 100}%, calc(100% - 7rem))` }}
+          className="absolute z-10 top-11 w-64 -translate-x-1/2 rounded-lg border border-border bg-white px-3 py-2 shadow-lg text-sm pointer-events-none"
+          style={{ left: `clamp(8rem, ${((active + 0.5) / days.length) * 100}%, calc(100% - 8rem))` }}
         >
           <p className="font-medium text-text-primary">{formatDay(hovered.date)}</p>
           <p className={`mt-1 flex items-center gap-1.5 ${STATE_META[hovered.status].text}`}>
@@ -84,6 +87,7 @@ function UptimeBars({ component, visibleDays }: { component: StatusComponent; vi
             {STATE_META[hovered.status].label}
           </p>
           <p className="text-text-tertiary">{dayDetail(component, hovered)}</p>
+          {hovered.note && <p className="mt-1 text-xs text-text-muted">{hovered.note}</p>}
         </div>
       )}
       <div className="mt-2 flex justify-between text-xs text-text-muted">
@@ -229,6 +233,10 @@ export default function StatusPage() {
                     {STATE_META[state].label}
                   </li>
                 ))}
+                <li className="flex items-center gap-1.5">
+                  <span className="inline-block w-3 h-3 rounded-[2px] bg-success opacity-50" aria-hidden />
+                  Estimated (before monitoring started)
+                </li>
               </ul>
             </>
           )}

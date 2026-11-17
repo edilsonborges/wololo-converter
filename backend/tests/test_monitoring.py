@@ -118,3 +118,66 @@ class TestStatus:
         data = (await client.get("/api/status")).json()
         api = next(c for c in data["components"] if c["id"] == "api")
         assert api["status"] == "degraded"
+
+
+class TestBackfill:
+    LOG = [
+        "2026-10-16T12:09:54Z INF Starting tunnel tunnelID=x",
+        "2026-10-16T12:09:56Z INF Registered tunnel connection connIndex=0",
+        "2026-10-16T13:00:00Z ERR Request failed error=\"Unable to reach the origin service.\" dest=https://api.edilson.dev/x",
+        "2026-10-17T10:00:00Z ERR Request failed error=\"stream 1 canceled by remote\" dest=https://wololo.edilson.dev/api/jobs/1/download",
+        "2026-10-18T03:04:32Z INF Retrying connection",
+        "2026-10-18T04:30:59Z INF Starting tunnel tunnelID=x",
+        "2026-10-18T04:31:04Z INF Registered tunnel connection connIndex=0",
+        "2026-10-19T08:00:10Z ERR Request failed error=\"Unable to reach the origin service.\" dest=https://wololo.edilson.dev/",
+        "2026-10-19T08:00:40Z ERR Request failed error=\"Unable to reach the origin service.\" dest=https://wololo.edilson.dev/api",
+        "2026-10-20T09:00:00Z INF Registered tunnel connection connIndex=1",
+    ]
+
+    def test_tunnel_evidence(self):
+        from datetime import date
+        from app.backfill import TunnelEvidence
+
+        evidence = TunnelEvidence(self.LOG)
+        assert evidence.covers(date(2026, 10, 16)) and not evidence.covers(date(2026, 10, 21))
+        # Other services' failures don't count against Wololo
+        assert evidence.downtime(date(2026, 10, 16)) == (0.0, [])
+        minutes, reasons = evidence.downtime(date(2026, 10, 18))
+        assert round(minutes) == 87  # 03:04:32 -> 04:31:04
+        assert "tunnel restart" in reasons[0]
+        minutes, reasons = evidence.downtime(date(2026, 10, 19))
+        assert minutes == 1  # two failures in the same minute
+        assert evidence.requests_seen[date(2026, 10, 17)] == 1
+
+    def test_estimates(self):
+        from datetime import date, timedelta
+        from app.backfill import TunnelEvidence, estimate_days
+
+        evidence = TunnelEvidence(self.LOG)
+        days = [date(2026, 10, 10) + timedelta(days=n) for n in range(10)]
+        result = estimate_days(days, evidence, {date(2026, 10, 12): 3, date(2026, 10, 17): 2})
+        # Before the tunnel log: only days with downloads, without an uptime figure
+        assert result[date(2026, 10, 12)] == (
+            "operational", None, "Before monitoring: 3 download requests answered this day",
+        )
+        assert date(2026, 10, 11) not in result
+        assert result[date(2026, 10, 17)][:2] == ("operational", 100.0)
+        assert "2 download requests answered" in result[date(2026, 10, 17)][2]
+        assert result[date(2026, 10, 18)][0] == "outage"  # 94% < 95%
+        assert result[date(2026, 10, 18)][1] == round(100 - (86 + 32 / 60) * 100 / 1440, 2)
+
+    async def test_status_uses_estimates_before_monitoring(self, client, use_test_db):
+        from app.models import StatusBackfill
+
+        now = utcnow()
+        yesterday = (now - timedelta(days=1)).date().isoformat()
+        use_test_db.add(StatusCheck(checked_at=now - timedelta(minutes=1), component="api", ok=True))
+        use_test_db.add(StatusBackfill(day=yesterday, component="api", status="operational",
+                                       uptime=None, note="Before monitoring: 2 download requests answered this day"))
+        await use_test_db.commit()
+        data = (await client.get("/api/status")).json()
+        api = next(c for c in data["components"] if c["id"] == "api")
+        day = api["days"][-2]
+        assert day["estimated"] is True
+        assert day["status"] == "operational"
+        assert day["note"].startswith("Before monitoring")

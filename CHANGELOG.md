@@ -3,6 +3,15 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.14.0] - 2026-11-17
+
+### Added
+
+- The status page now shows the website and API history from before
+  monitoring started, estimated from the Cloudflare tunnel log and the
+  download history. Estimated days are drawn lighter and say where the
+  estimate comes from.
+
 ## [0.13.0] - 2026-11-17
 
 ### Added
