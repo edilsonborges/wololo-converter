@@ -256,14 +256,24 @@ function App() {
       {/* Footer */}
       <footer className="py-6 px-4 text-center text-text-muted text-sm border-t border-border-light">
         <p>Personal use only. Respect copyright and platform terms of service.</p>
-        <button
-          type="button"
-          onClick={() => setShowReleaseNotes(true)}
-          className="mt-1 text-text-muted/60 text-xs underline-offset-2 hover:text-accent hover:underline transition-colors"
-          title="See what changed in each version"
-        >
-          v{packageJson.version}
-        </button>
+        <p className="mt-1 text-text-muted/60 text-xs">
+          <a
+            href="/status"
+            className="underline-offset-2 hover:text-accent hover:underline transition-colors"
+            title="Service status"
+          >
+            _status
+          </a>
+          {' • '}
+          <button
+            type="button"
+            onClick={() => setShowReleaseNotes(true)}
+            className="underline-offset-2 hover:text-accent hover:underline transition-colors"
+            title="See what changed in each version"
+          >
+            v{packageJson.version}
+          </button>
+        </p>
       </footer>
 
       {showReleaseNotes && (

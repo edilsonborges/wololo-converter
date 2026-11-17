@@ -4,5 +4,8 @@
 User-agent: *
 Allow: /$
 Allow: /llms.txt
+Allow: /status
 Allow: /api/openapi.json
 Disallow: /api/
+Disallow: /login
+Disallow: /admin

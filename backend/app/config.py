@@ -35,6 +35,16 @@ class Settings(BaseSettings):
     # Export from incognito session with a throwaway account to avoid bans
     cookies_file: str = ""
 
+    # Admin view at /login. Empty password disables it.
+    admin_password: SecretStr = Field(default=SecretStr(""), repr=False)
+    admin_session_hours: int = Field(default=168, ge=1)  # 7 days
+
+    # Status page monitor
+    status_check_interval_seconds: int = Field(default=60, ge=5)
+    status_site_url: str = "http://frontend:47651/"  # the website, inside compose
+    status_history_days: int = Field(default=90, ge=1)
+    system_sample_days: int = Field(default=7, ge=1)
+
     # Rate limiting
     rate_limit_downloads: str = "10/minute"
     api_keys: SecretStr = Field(default=SecretStr(""), repr=False)

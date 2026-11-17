@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
-from sqlalchemy import Column, String, DateTime, Integer, Float, Text
+from sqlalchemy import Boolean, Column, String, DateTime, Integer, Float, Text
 from sqlalchemy.orm import declarative_base
 
 Base = declarative_base()
@@ -72,6 +72,12 @@ class DownloadJob(Base):
     # Error handling
     error_message = Column(Text, nullable=True)
 
+    # Who asked for it (admin view). source: web, app or link
+    client_ip = Column(String(64), nullable=True)
+    client_name = Column(String(100), nullable=True)  # API key name, when one was sent
+    source = Column(String(20), nullable=True)
+    user_agent = Column(String(500), nullable=True)
+
     # Timestamps
     created_at = Column(DateTime, default=utcnow)
     started_at = Column(DateTime, nullable=True)
@@ -88,3 +94,28 @@ class JobStats(Base):
     successful_jobs = Column(Integer, default=0)
     failed_jobs = Column(Integer, default=0)
     total_bytes_downloaded = Column(Integer, default=0)
+
+
+class StatusCheck(Base):
+    """One availability probe of a component (status page)."""
+    __tablename__ = "status_checks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    checked_at = Column(DateTime, default=utcnow, index=True)
+    component = Column(String(30), nullable=False, index=True)
+    ok = Column(Boolean, nullable=False)
+    latency_ms = Column(Integer, nullable=True)
+    detail = Column(String(300), nullable=True)
+
+
+class SystemSample(Base):
+    """Machine usage sampled once per check interval (admin view)."""
+    __tablename__ = "system_samples"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    sampled_at = Column(DateTime, default=utcnow, index=True)
+    cpu_percent = Column(Float, nullable=False)
+    memory_percent = Column(Float, nullable=False)
+    disk_percent = Column(Float, nullable=False)
+    active_downloads = Column(Integer, nullable=False, default=0)
+    queued_downloads = Column(Integer, nullable=False, default=0)

@@ -52,7 +52,8 @@ Long videos can take minutes; a job times out after 1 hour.
 
 - `POST /api/download` with JSON `{"url": "...", "quality": "720p"}`: start a job and follow it as above.
 - `POST /api/preview` with JSON `{"url": "..."}`: title, duration, thumbnail and available qualities without downloading.
-- `GET /api/health`: service status and version.
+- `GET /api/health`: service health and version.
+- `GET /api/status`: current state and 90-day history of the service and of each platform (human view: /status).
 - `DELETE /api/jobs/<job_id>`: cancel a job.
 
 Use it only for content you have the right to download.
