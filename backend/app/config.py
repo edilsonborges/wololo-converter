@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     max_concurrent_downloads: int = Field(default=3, ge=1)
     max_queued_downloads: int = Field(default=20, ge=0)
     download_timeout_seconds: int = 3600  # 1 hour
+    # GET /api/download waits this long for the file before answering 202
+    # (kept well under proxy limits such as Cloudflare's 100 s)
+    link_download_wait_seconds: float = Field(default=25, ge=0)
     max_file_size_mb: int = 10000  # 10GB for 4K videos
 
     # Browser cookies for platforms that require auth

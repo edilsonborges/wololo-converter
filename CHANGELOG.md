@@ -3,6 +3,26 @@
 All notable changes to Wololo Converter are documented here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] - 2026-11-16
+
+### Added
+
+- Download with a single link: `GET /api/download?url=<encoded video URL>`.
+  `quality` is optional and defaults to 720p (the best available up to 720p,
+  never upscaled). Quick downloads return the file directly; longer ones
+  return `202` with the job to follow.
+- `/llms.txt` with a short guide for AI agents, and the OpenAPI contract at
+  `/api/openapi.json` (interactive docs at `/api/docs`). The home page links
+  to both.
+- `/robots.txt`: the home page and the docs can be crawled, API calls can't.
+
+### Fixed
+
+- `/llms.txt`, `/robots.txt` and other missing `.txt`/`.json` files no longer
+  return the home page HTML.
+- Downloading a job's file before it finishes now answers `409` instead of
+  possibly serving a partial stream.
+
 ## [0.10.0] - 2026-11-08
 
 ### Added

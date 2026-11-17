@@ -260,3 +260,160 @@ class TestDurationsAndRestart:
 
         assert response.status_code == 200
         assert response.json()[0]["duration"] == 26
+
+
+class TestDownloadLink:
+    """GET /api/download: one link that starts a download and returns the file."""
+
+    @pytest.fixture
+    def fake_downloads(self, monkeypatch, tmp_path):
+        from app import routes
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "temp_dir", tmp_path)
+        calls = []
+        behaviour = {"mode": "success"}
+        release = __import__("threading").Event()
+
+        def run(url, job_id, quality, progress):
+            calls.append({"url": url, "quality": quality})
+            if behaviour["mode"] == "slow":
+                release.wait(timeout=5)
+            if behaviour["mode"] == "fail":
+                return {"success": False, "error": "Video unavailable"}
+            job_dir = tmp_path / job_id
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "Clip.mp4").write_bytes(b"mp4-bytes")
+            return {"success": True, "filename": "Clip.mp4", "title": "Clip"}
+
+        async def no_persist(progress, result):
+            return None
+
+        monkeypatch.setattr(download_service, "_run_download", run)
+        monkeypatch.setattr(routes, "persist_job_result", no_persist)
+        yield calls, behaviour, release
+        release.set()
+
+    async def test_returns_file_with_720p_default(self, client, fake_downloads):
+        calls, _, _ = fake_downloads
+        response = await client.get(
+            "/api/download",
+            params={"url": "https://www.youtube.com/watch?v=379BagNcNf4"},
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "video/mp4"
+        assert "attachment" in response.headers["content-disposition"]
+        assert response.content == b"mp4-bytes"
+        assert calls[0]["quality"].value == "720p"
+        assert calls[0]["url"] == "https://youtu.be/379BagNcNf4"
+
+    async def test_accepts_existing_qualities(self, client, fake_downloads):
+        calls, _, _ = fake_downloads
+        response = await client.get(
+            "/api/download",
+            params={"url": "https://www.youtube.com/watch?v=379BagNcNf4", "quality": "360p"},
+        )
+        assert response.status_code == 200
+        assert calls[0]["quality"].value == "360p"
+
+    async def test_rejects_unknown_quality(self, client, fake_downloads):
+        response = await client.get(
+            "/api/download",
+            params={"url": "https://www.youtube.com/watch?v=379BagNcNf4", "quality": "4k"},
+        )
+        assert response.status_code == 422
+
+    async def test_requires_url(self, client):
+        response = await client.get("/api/download")
+        assert response.status_code == 422
+
+    async def test_rejects_unsupported_url(self, client):
+        response = await client.get("/api/download", params={"url": "https://evil.com/video"})
+        assert response.status_code == 400
+
+    async def test_encoded_ampersand_reaches_backend_intact(self, client, fake_downloads):
+        calls, _, _ = fake_downloads
+        response = await client.get(
+            "/api/download",
+            params={"url": "https://www.youtube.com/watch?feature=share&v=379BagNcNf4"},
+        )
+        assert response.status_code == 200
+        assert calls[0]["url"] == "https://youtu.be/379BagNcNf4"
+
+    async def test_unencoded_ampersand_is_rebuilt(self, client, fake_downloads):
+        calls, _, _ = fake_downloads
+        response = await client.get(
+            "/api/download?url=https://www.youtube.com/watch?feature=share&v=379BagNcNf4&quality=480p"
+        )
+        assert response.status_code == 200
+        assert calls[0]["url"] == "https://youtu.be/379BagNcNf4"
+        assert calls[0]["quality"].value == "480p"
+
+    async def test_slow_download_returns_202_with_follow_up_urls(
+        self, client, fake_downloads, monkeypatch
+    ):
+        from app.config import settings
+
+        _, behaviour, release = fake_downloads
+        behaviour["mode"] = "slow"
+        monkeypatch.setattr(settings, "link_download_wait_seconds", 0.05)
+        response = await client.get(
+            "/api/download",
+            params={"url": "https://www.youtube.com/watch?v=379BagNcNf4"},
+        )
+        assert response.status_code == 202
+        body = response.json()
+        job_id = body["job_id"]
+        assert body["status_url"] == f"/api/jobs/{job_id}"
+        assert body["download_url"] == f"/api/jobs/{job_id}/download"
+        assert response.headers["location"] == body["status_url"]
+        assert response.headers["retry-after"] == "5"
+
+        status = await client.get(body["status_url"])
+        assert status.status_code == 200
+        assert status.json()["status"] in ("queued", "validating", "downloading")
+
+        early = await client.get(body["download_url"])
+        assert early.status_code == 409
+
+        release.set()
+        task = __import__("app.routes", fromlist=["download_tasks"]).download_tasks.get(job_id)
+        if task:
+            await task
+        done = await client.get(body["download_url"])
+        assert done.status_code == 200
+        assert done.content == b"mp4-bytes"
+
+    async def test_failed_download_returns_422_with_reason(self, client, fake_downloads):
+        _, behaviour, _ = fake_downloads
+        behaviour["mode"] = "fail"
+        response = await client.get(
+            "/api/download",
+            params={"url": "https://www.youtube.com/watch?v=379BagNcNf4"},
+        )
+        assert response.status_code == 422
+        assert response.json()["detail"] == "Video unavailable"
+        assert response.json()["status"] == "failed"
+
+    async def test_post_download_still_works(self, client, fake_downloads):
+        response = await client.post("/api/download", json={
+            "url": "https://www.youtube.com/watch?v=379BagNcNf4", "quality": "mp3",
+        })
+        assert response.status_code == 200
+        assert response.json()["status"] == "queued"
+
+
+class TestOpenAPI:
+    async def test_contract_is_published_under_api(self, client):
+        response = await client.get("/api/openapi.json")
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/json")
+        spec = response.json()
+        get_download = spec["paths"]["/api/download"]["get"]
+        params = {p["name"]: p for p in get_download["parameters"]}
+        assert params["url"]["required"] is True
+        assert params["quality"]["required"] is False
+        assert params["quality"]["schema"]["default"] == "720p"
+        assert {"200", "202", "400", "422", "429"} <= set(get_download["responses"])
+        assert "video/mp4" in get_download["responses"]["200"]["content"]
+        assert "post" in spec["paths"]["/api/download"]

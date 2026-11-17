@@ -1,0 +1,58 @@
+# Wololo Converter
+
+> Wololo Converter downloads videos (MP4) and audio (MP3) from public links on YouTube, Instagram, TikTok, Twitter/X, Threads and Facebook. One GET request with the video URL is enough to ask for a download.
+
+Base URL: https://wololo.edilson.dev
+OpenAPI contract: https://wololo.edilson.dev/api/openapi.json
+
+## Supported links
+
+- YouTube: watch, shorts, live (ended streams only), youtu.be, embed
+- Instagram: posts, reels, TV, share links
+- TikTok: video pages, vm/vt short links
+- Twitter/X: status links
+- Threads: post and share links
+- Facebook: video pages, watch, fb.watch
+
+## Download with one link
+
+Percent-encode the full video URL and pass it as `url`:
+
+    GET https://wololo.edilson.dev/api/download?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D379BagNcNf4
+
+- `quality` is optional. Default: `720p`, meaning the best version available up to 720p (never upscaled).
+- Other values: `360p`, `480p`, `720p`, `1080p`, or `mp3` for audio only.
+
+    GET https://wololo.edilson.dev/api/download?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D379BagNcNf4&quality=mp3
+
+Always percent-encode `url` (a raw `&` in the video URL would otherwise split it). Unknown query parameters are appended back to the video URL as a fallback.
+
+## Responses
+
+- `200`: the file itself, as an attachment (`Content-Disposition: attachment; filename=...`). `video/mp4` for video, `audio/mpeg` for `mp3`. Done.
+- `202`: the download continues in the background (the server waits about 25 seconds before answering). JSON body:
+
+      {"job_id": "...", "status": "downloading", "status_url": "/api/jobs/<job_id>",
+       "download_url": "/api/jobs/<job_id>/download", "progress_url": "/api/jobs/<job_id>/progress",
+       "retry_after_seconds": 5, "message": "..."}
+
+- `400`: invalid or unsupported URL. `422`: the download failed (`detail` says why) or a parameter is invalid. `429`: rate limit (10 downloads per minute) or the queue is full; retry later.
+
+## Following a job after 202
+
+1. Every `retry_after_seconds` (5), `GET /api/jobs/<job_id>`. Watch `status` and `progress` (0-100).
+   Status values: `queued`, `validating`, `downloading`, `converting`, `finalizing`, `completed`, `failed`, `cancelled`.
+2. When `status` is `completed`, `GET /api/jobs/<job_id>/download` returns the file. Before that it answers `409`.
+3. On `failed`, read `error_message`. On `cancelled`, start over.
+4. Fetch the file soon: finished files are deleted after about 1 hour.
+
+Long videos can take minutes; a job times out after 1 hour.
+
+## Other endpoints
+
+- `POST /api/download` with JSON `{"url": "...", "quality": "720p"}`: start a job and follow it as above.
+- `POST /api/preview` with JSON `{"url": "..."}`: title, duration, thumbnail and available qualities without downloading.
+- `GET /api/health`: service status and version.
+- `DELETE /api/jobs/<job_id>`: cancel a job.
+
+Use it only for content you have the right to download.

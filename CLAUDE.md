@@ -69,6 +69,8 @@ docker-compose up -d --build
 - `hooks/useQueueManager.ts` — Core hook for download queue logic (sequential/parallel processing, SSE lifecycle)
 - `components/` — `MultiURLInput`, `QueueManager`, `QualitySelector`, `VideoPreview`, `ProgressCard`, `SmoothProgressBar`, `Icon`
 
+**Agent access**: `GET /api/download?url=<encoded URL>[&quality=...]` (default 720p) waits `LINK_DOWNLOAD_WAIT_SECONDS` (25 s) and returns the file, or `202` with `status_url`/`download_url`. Agent guide in `frontend/public/llms.txt`; OpenAPI at `/api/openapi.json`; `robots.txt` blocks `/api/` except the contract. Keep `llms.txt` in sync when the API changes.
+
 **Communication flow**: Frontend calls REST endpoints to start downloads, then subscribes to SSE (`/api/jobs/{id}/progress`) for real-time progress updates. The backend runs yt-dlp in a thread pool and pushes progress via `asyncio.Queue` to SSE connections.
 
 ## Key Design Decisions

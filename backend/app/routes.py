@@ -4,10 +4,13 @@ import json
 import logging
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Dict
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Response
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from slowapi import Limiter
@@ -18,6 +21,8 @@ from .access import rate_limit_identity, validate_api_key
 from .database import get_session, get_db_context
 from .models import DownloadJob, JobStatus, OutputFormat, VideoQuality, utcnow
 from .schemas import (
+    DownloadAcceptedResponse,
+    DownloadFailedResponse,
     DownloadRequest,
     DownloadStartResponse,
     JobResponse,
@@ -87,6 +92,26 @@ async def persist_job_result(progress: DownloadProgress, result: dict) -> None:
         await db.execute(
             update(DownloadJob).where(DownloadJob.id == progress.job_id).values(**values)
         )
+
+
+CONTENT_TYPES = {
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".mkv": "video/x-matroska",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".opus": "audio/opus",
+    ".ogg": "audio/ogg",
+}
+
+
+def file_response(file_path: Path) -> FileResponse:
+    """Send a finished file as an attachment."""
+    return FileResponse(
+        path=str(file_path),
+        filename=file_path.name,
+        media_type=CONTENT_TYPES.get(file_path.suffix.lower(), "application/octet-stream"),
+    )
 
 
 def _servable_files(job_dir: Path) -> list[Path]:
@@ -182,6 +207,67 @@ async def resolve_music_link(request: Request, resolve_request: ResolveRequest):
         raise HTTPException(status_code=502, detail=f"Could not read the music page: {e}")
 
 
+async def queue_download(
+    url: str,
+    quality: VideoQuality,
+    db: AsyncSession,
+    platform: str,
+) -> tuple[str, asyncio.Task]:
+    """Create the job row and hand the download to the shared queue."""
+    event_loop = asyncio.get_running_loop()
+
+    # Create progress callback for SSE
+    def progress_callback(update: JobProgressUpdate):
+        def enqueue_update():
+            queue = sse_connections.get(update.job_id)
+            if not queue:
+                return
+            try:
+                queue.put_nowait(update)
+            except asyncio.QueueFull:
+                pass
+
+        # yt-dlp invokes progress hooks from its worker thread.
+        event_loop.call_soon_threadsafe(enqueue_update)
+
+    # Map quality to output_format for DB storage
+    db_output_format = (
+        OutputFormat.AUDIO_MP3.value if quality == VideoQuality.MP3
+        else OutputFormat.VIDEO.value
+    )
+
+    # Create the job row before the download starts so the final state
+    # can always be persisted, even for downloads that finish instantly.
+    job_id = str(uuid.uuid4())
+    job = DownloadJob(
+        id=job_id,
+        url=url,
+        platform=platform,
+        output_format=db_output_format,
+        quality=quality.value,
+        status=JobStatus.QUEUED.value,
+        created_at=utcnow(),
+    )
+
+    async def persist_queued_job():
+        db.add(job)
+        await db.commit()
+
+    job_id, task, _ = await download_service.start_download(
+        url=url,
+        quality=quality,
+        progress_callback=progress_callback,
+        job_id=job_id,
+        on_finish=persist_job_result,
+        on_enqueue=persist_queued_job,
+    )
+
+    # Track the task until it finishes
+    download_tasks[job_id] = task
+    task.add_done_callback(lambda _t, jid=job_id: download_tasks.pop(jid, None))
+    return job_id, task
+
+
 @router.post(
     "/download",
     response_model=DownloadStartResponse,
@@ -199,72 +285,20 @@ async def start_download(
     if not is_valid:
         raise HTTPException(status_code=400, detail=error)
 
+    # Resolve quality: use quality field, fallback to output_format for backward compat
+    quality = download_request.quality
+    if download_request.output_format is not None and quality == VideoQuality.Q_480P:
+        # User sent deprecated output_format, map it
+        if download_request.output_format in (
+            OutputFormat.AUDIO_MP3, OutputFormat.AUDIO_M4A,
+            OutputFormat.AUDIO_WAV, OutputFormat.AUDIO_FLAC,
+            OutputFormat.AUDIO_OGG,
+        ):
+            quality = VideoQuality.MP3
+        # else keep default video quality
+
     try:
-        event_loop = asyncio.get_running_loop()
-
-        # Create progress callback for SSE
-        def progress_callback(update: JobProgressUpdate):
-            def enqueue_update():
-                queue = sse_connections.get(update.job_id)
-                if not queue:
-                    return
-                try:
-                    queue.put_nowait(update)
-                except asyncio.QueueFull:
-                    pass
-
-            # yt-dlp invokes progress hooks from its worker thread.
-            event_loop.call_soon_threadsafe(enqueue_update)
-
-        # Resolve quality: use quality field, fallback to output_format for backward compat
-        quality = download_request.quality
-        if download_request.output_format is not None and quality == VideoQuality.Q_480P:
-            # User sent deprecated output_format, map it
-            if download_request.output_format in (
-                OutputFormat.AUDIO_MP3, OutputFormat.AUDIO_M4A,
-                OutputFormat.AUDIO_WAV, OutputFormat.AUDIO_FLAC,
-                OutputFormat.AUDIO_OGG,
-            ):
-                quality = VideoQuality.MP3
-            # else keep default video quality
-
-        # Map quality to output_format for DB storage
-        db_output_format = (
-            OutputFormat.AUDIO_MP3.value if quality == VideoQuality.MP3
-            else OutputFormat.VIDEO.value
-        )
-
-        # Create the job row before the download starts so the final state
-        # can always be persisted, even for downloads that finish instantly.
-        job_id = str(uuid.uuid4())
-        job = DownloadJob(
-            id=job_id,
-            url=download_request.url,
-            platform=platform,
-            output_format=db_output_format,
-            quality=quality.value,
-            status=JobStatus.QUEUED.value,
-            created_at=utcnow(),
-        )
-
-        async def persist_queued_job():
-            db.add(job)
-            await db.commit()
-
-        # Start download
-        job_id, task, _ = await download_service.start_download(
-            url=download_request.url,
-            quality=quality,
-            progress_callback=progress_callback,
-            job_id=job_id,
-            on_finish=persist_job_result,
-            on_enqueue=persist_queued_job,
-        )
-
-        # Track the task until it finishes
-        download_tasks[job_id] = task
-        task.add_done_callback(lambda _t, jid=job_id: download_tasks.pop(jid, None))
-
+        job_id, _ = await queue_download(download_request.url, quality, db, platform)
         return DownloadStartResponse(
             job_id=job_id,
             message="Download started",
@@ -277,6 +311,136 @@ async def start_download(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start download: {str(e)}")
+
+
+LINK_QUERY_PARAMS = {"url", "quality"}
+
+
+def link_source_url(request: Request, url: str) -> str:
+    """Rebuild a source URL that was pasted without percent-encoding.
+
+    In ``?url=https://www.youtube.com/watch?feature=share&v=ID`` the ``&``
+    ends the ``url`` parameter early and ``v`` arrives as a parameter of its
+    own. Parameters this endpoint doesn't know belong to the source URL, so
+    they are appended back in their original order.
+    """
+    extras = [
+        (key, value) for key, value in request.query_params.multi_items()
+        if key not in LINK_QUERY_PARAMS
+    ]
+    if not extras:
+        return url
+    separator = "&" if "?" in url else "?"
+    return url + separator + urlencode(extras)
+
+
+@router.get(
+    "/download",
+    summary="Download a video from a single link",
+    status_code=200,
+    response_class=FileResponse,
+    responses={
+        200: {
+            "description": "The finished file, sent as an attachment "
+            "(MP4 for video qualities, MP3 for `mp3`).",
+            "content": {
+                "video/mp4": {"schema": {"type": "string", "format": "binary"}},
+                "audio/mpeg": {"schema": {"type": "string", "format": "binary"}},
+            },
+        },
+        202: {
+            "model": DownloadAcceptedResponse,
+            "description": "Still downloading. Poll `status_url` until `status` is "
+            "`completed`, then GET `download_url`. The `Location` header carries "
+            "`status_url` and `Retry-After` the suggested polling interval.",
+        },
+        400: {"model": ErrorResponse, "description": "Invalid or unsupported URL"},
+        401: {"model": ErrorResponse, "description": "Invalid `X-Wololo-Key` (the key is optional)"},
+        422: {"model": DownloadFailedResponse, "description": "The download failed, or a parameter is invalid"},
+        429: {"model": ErrorResponse, "description": "Rate limit reached or download queue full"},
+    },
+)
+@limiter.limit(settings.rate_limit_downloads)
+async def download_from_link(
+    request: Request,
+    url: str = Query(
+        ...,
+        min_length=10,
+        max_length=2048,
+        description="Full URL of the video, percent-encoded "
+        "(e.g. `https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D379BagNcNf4`).",
+    ),
+    quality: VideoQuality = Query(
+        VideoQuality.Q_720P,
+        description="Video height or `mp3`. Defaults to 720p: the best available "
+        "up to 720p, never upscaled.",
+    ),
+    db: AsyncSession = Depends(get_session),
+):
+    """Start a download with one GET and receive the file when it's quick.
+
+    The response waits a few seconds for the download. If the file is ready it
+    is returned as an attachment; otherwise the job keeps running in the
+    background and the response is `202` with the URLs to follow it.
+    """
+    source_url = link_source_url(request, url)
+    try:
+        source_url = DownloadRequest(url=source_url, quality=quality).url
+    except ValidationError as e:
+        message = e.errors()[0].get("msg", "Invalid URL")
+        raise HTTPException(status_code=400, detail=message.removeprefix("Value error, "))
+
+    is_valid, platform, error = validate_url(source_url)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error)
+
+    try:
+        job_id, task = await queue_download(source_url, quality, db, platform)
+    except DownloadQueueFull as e:
+        raise HTTPException(status_code=429, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # asyncio.wait never cancels the task: the download carries on if the
+    # wait ends or the client goes away.
+    done, _ = await asyncio.wait({task}, timeout=settings.link_download_wait_seconds)
+    if task in done:
+        result = task.result()
+        if result.get("success"):
+            job_dir = settings.temp_dir / job_id
+            recorded = SimpleNamespace(filename=result.get("filename"), quality=quality.value)
+            file_path = find_primary_file(job_dir, recorded) if job_dir.exists() else None
+            if file_path:
+                return file_response(file_path)
+        else:
+            status = JobStatus.CANCELLED if result.get("cancelled") else JobStatus.FAILED
+            return JSONResponse(
+                status_code=422,
+                content=DownloadFailedResponse(
+                    job_id=job_id,
+                    status=status,
+                    detail=result.get("error") or "Download failed",
+                ).model_dump(mode="json"),
+            )
+
+    progress = download_service.get_job_progress(job_id)
+    status = progress.status if progress else JobStatus.QUEUED
+    retry_after = 5
+    body = DownloadAcceptedResponse(
+        job_id=job_id,
+        status=status,
+        message="Download in progress. Poll status_url until status is completed, "
+        "then GET download_url.",
+        status_url=f"/api/jobs/{job_id}",
+        download_url=f"/api/jobs/{job_id}/download",
+        progress_url=f"/api/jobs/{job_id}/progress",
+        retry_after_seconds=retry_after,
+    )
+    return JSONResponse(
+        status_code=202,
+        content=body.model_dump(mode="json"),
+        headers={"Location": body.status_url, "Retry-After": str(retry_after)},
+    )
 
 
 @router.get("/jobs/{job_id}", response_model=JobResponse)
@@ -375,6 +539,15 @@ async def download_file(job_id: str, db: AsyncSession = Depends(get_session)):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
+    # While the job runs its folder holds partial streams; don't serve them
+    progress = download_service.get_job_progress(job_id)
+    if progress and progress.status not in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Download is not finished yet (status: {progress.status.value}). "
+            f"Poll /api/jobs/{job_id} until status is completed.",
+        )
+
     # Find the file
     job_dir = settings.temp_dir / job_id
     if not job_dir.exists():
@@ -384,24 +557,7 @@ async def download_file(job_id: str, db: AsyncSession = Depends(get_session)):
     if not file_path:
         raise HTTPException(status_code=404, detail="No downloadable files found")
 
-    # Determine content type
-    suffix = file_path.suffix.lower()
-    content_types = {
-        ".mp4": "video/mp4",
-        ".webm": "video/webm",
-        ".mkv": "video/x-matroska",
-        ".mp3": "audio/mpeg",
-        ".m4a": "audio/mp4",
-        ".opus": "audio/opus",
-        ".ogg": "audio/ogg",
-    }
-    content_type = content_types.get(suffix, "application/octet-stream")
-
-    return FileResponse(
-        path=str(file_path),
-        filename=file_path.name,
-        media_type=content_type,
-    )
+    return file_response(file_path)
 
 
 @router.post("/jobs/{job_id}/extract-audio")
